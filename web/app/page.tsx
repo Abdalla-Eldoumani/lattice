@@ -173,13 +173,17 @@ export default function Home() {
     }
   }, [selected.kind, selected.definition, effectiveEngine]);
 
-  // keyboard control (VIZ-08): space / right-arrow single-step, p toggles play/pause, ? or h opens the
-  // shortcut help. The keys drive the SAME solver actions the buttons do (gate the animation, never the
-  // state — the step path is the real state update). Keys are ignored while focus is in the picker or any
-  // text field so the native select/range keyboard still works, and space's default page scroll is
-  // prevented. The help key works regardless of connection (it is documentation, not a solver action);
-  // the solver keys require an open socket. While the help dialog is open the solver keys are suppressed
-  // so the dialog's own ESC/Tab handling (focus trap, close) owns the keyboard.
+  // keyboard control (VIZ-08): space single-steps the live solver, arrows scrub the history, p toggles
+  // play/pause, ? or h opens the shortcut help. The keys drive the SAME actions the buttons do (gate the
+  // animation, never the state). Keys are ignored while focus is in the picker or any text field so the
+  // native select/range keyboard still works, and space's/arrows' default page scroll is prevented. The
+  // help key and the history-nav arrows work regardless of connection (they are documentation / pure
+  // client-side replay, not a solver action); the live solver keys require an open socket. While the
+  // help dialog is open every page key is suppressed so its ESC/Tab handling (focus trap) owns the board.
+  //
+  // The Right-arrow has a dual role: when scrubbed back into history it steps the view FORWARD through
+  // the received events (pure replay); at the live edge it sends a solver `step` (the live behavior, so
+  // following the edge keeps advancing the real solve). Left-arrow always steps the view backward.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -194,8 +198,24 @@ export default function Home() {
         setHelpOpen(true);
         return;
       }
-      // The solver keys: only when the socket is open and the help dialog is not capturing the keyboard.
-      if (helpOpen || solver.conn !== "open") return;
+      if (helpOpen) return; // the dialog owns the keyboard while open
+      // History navigation: pure client-side replay over already-received events, so it works without a
+      // live socket. Left always steps back; Right steps forward only while scrubbed back (at the live
+      // edge it falls through to the live `step` below). No-ops at the ends / in race mode are absorbed
+      // by the hook's clamp, so these are always safe to fire.
+      if (e.key === "ArrowLeft") {
+        e.preventDefault(); // arrows would otherwise scroll the page
+        solver.stepBack();
+        return;
+      }
+      if (e.key === "ArrowRight" && !solver.following) {
+        e.preventDefault();
+        solver.stepForward();
+        return;
+      }
+      // The live solver keys: only when the socket is open. Right-arrow reaches here at the live edge,
+      // where it must drive the real solve forward exactly as before (do not break the live step).
+      if (solver.conn !== "open") return;
       if (e.key === " " || e.key === "ArrowRight") {
         e.preventDefault(); // space would otherwise scroll the page
         solver.step();
@@ -308,6 +328,18 @@ export default function Home() {
                 setPlaying(false);
                 solver.restart();
               }}
+            />
+            {/* The event scrubber: replay/step-back through the events already received. Single-engine
+                only (the race is play-only — see docs/VISUALIZER.md), so it never renders in the race layout
+                above. Disabled until the buffer has events. */}
+            <Scrubber
+              count={solver.eventCount}
+              cursor={solver.cursor}
+              following={solver.following}
+              onSeek={solver.seek}
+              onStepBack={solver.stepBack}
+              onStepForward={solver.stepForward}
+              onJumpToLive={solver.jumpToLive}
             />
           </section>
 
@@ -579,6 +611,95 @@ function Controls({
           cp vs sat races both engines on one instance
         </span>
       )}
+    </div>
+  );
+}
+
+// The event scrubber / step-back timeline (VIZ extras). It lets the viewer move backward and forward
+// through the events ALREADY received and re-derive the view from the pure reducer over a prefix — the
+// "watch it think" replay. A real range input over [0, count] (keyboard-accessible: arrows step it, the
+// same as the page's Left/Right shortcuts) carries its own FOCUS_RING, aria-label, and an aria-valuetext
+// reading "event N of M". The position is also rendered as tabular text so it is legible without the
+// slider thumb (the reduced-motion requirement: no essential motion in the scrubber). A non-color
+// "viewing history" indicator plus a "jump to live" button appear only when scrubbed back. Before any
+// event (count 0) every control is disabled — there is nothing to replay yet.
+function Scrubber({
+  count,
+  cursor,
+  following,
+  onSeek,
+  onStepBack,
+  onStepForward,
+  onJumpToLive,
+}: {
+  count: number;
+  cursor: number;
+  following: boolean;
+  onSeek: (index: number) => void;
+  onStepBack: () => void;
+  onStepForward: () => void;
+  onJumpToLive: () => void;
+}) {
+  const empty = count === 0;
+  const valueText = empty
+    ? "no events yet"
+    : `event ${cursor} of ${count}`;
+  return (
+    <div className="flex w-full max-w-md flex-col items-center gap-1.5">
+      <div className="flex w-full items-center gap-2">
+        <button
+          type="button"
+          onClick={onStepBack}
+          disabled={empty || cursor === 0}
+          aria-label="step back one event"
+          className={`rounded-[var(--radius-sm)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-2)] px-2 py-1 text-sm text-[color:var(--color-ink-dim)] transition-colors hover:text-[color:var(--color-ink)] disabled:opacity-40 ${FOCUS_RING}`}
+        >
+          <span aria-hidden="true">{"←"}</span>
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={Math.max(count, 0)}
+          step={1}
+          value={cursor}
+          disabled={empty}
+          onChange={(e) => onSeek(Number(e.target.value))}
+          aria-label="event timeline"
+          aria-valuetext={valueText}
+          className={`h-1 flex-1 cursor-pointer accent-[color:var(--color-accent)] disabled:opacity-40 ${FOCUS_RING}`}
+        />
+        <button
+          type="button"
+          onClick={onStepForward}
+          disabled={empty || cursor >= count}
+          aria-label="step forward one event"
+          className={`rounded-[var(--radius-sm)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-2)] px-2 py-1 text-sm text-[color:var(--color-ink-dim)] transition-colors hover:text-[color:var(--color-ink)] disabled:opacity-40 ${FOCUS_RING}`}
+        >
+          <span aria-hidden="true">{"→"}</span>
+        </button>
+      </div>
+      {/* The position read-out, always present as text so the moment is legible without the slider
+          thumb (no essential motion). When scrubbed back it carries the explicit "viewing history"
+          state plus a "jump to live" button; at the live edge it reads "live". role=status so a screen
+          reader hears the position change. */}
+      <div
+        role="status"
+        className="flex w-full items-center justify-between gap-2 text-xs"
+      >
+        <span className="tabular text-[color:var(--color-ink-dim)]">
+          {empty ? "no events yet" : following ? `live - ${count} events` : `viewing history - ${cursor} of ${count}`}
+        </span>
+        {!following && !empty && (
+          <button
+            type="button"
+            onClick={onJumpToLive}
+            aria-label="jump to the latest event"
+            className={`rounded-[var(--radius-sm)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-2)] px-2 py-0.5 text-[color:var(--color-ink-dim)] transition-colors hover:text-[color:var(--color-ink)] ${FOCUS_RING}`}
+          >
+            jump to live
+          </button>
+        )}
+      </div>
     </div>
   );
 }

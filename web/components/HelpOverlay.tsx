@@ -16,7 +16,9 @@ const FOCUS_RING =
 // The shortcuts the page binds, the single source the overlay renders. Keep this in lockstep with the
 // keyboard handler in page.tsx: a key added there is a row added here, in the same change.
 const SHORTCUTS: { keys: string[]; action: string }[] = [
-  { keys: ["Space", "→"], action: "single-step the solve" },
+  { keys: ["Space"], action: "single-step the solve" },
+  { keys: ["←"], action: "step back through history" },
+  { keys: ["→"], action: "step forward (live-step at the latest)" },
   { keys: ["P"], action: "play / pause" },
   { keys: ["?", "H"], action: "open this help" },
   { keys: ["Esc"], action: "close this help" },
