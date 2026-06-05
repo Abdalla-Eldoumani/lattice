@@ -91,6 +91,43 @@ function checkGraphColoring(state: ReplayState, assignment: [number, number][]) 
   };
 }
 
+// Structural validity of a vertex -> color map against PETERSEN: every vertex carries a color in 1..k
+// and no edge is monochromatic. The edge-disjoint half of checkGraphColoring, factored so the race's
+// SAT side (which has no reducer-grid-in-vertex-coordinates to compare against) can reuse it.
+function validColoring(color: Map<number, number>): { ok: boolean; detail: string } {
+  for (let v = 0; v < PETERSEN.vertexCount; v++) {
+    const cv = color.get(v);
+    if (cv === undefined || cv < 1 || cv > PETERSEN.k) {
+      return { ok: false, detail: `vertex ${v} has no valid color (got ${cv})` };
+    }
+  }
+  for (const [u, w] of PETERSEN.edges) {
+    if (color.get(u) === color.get(w)) {
+      return { ok: false, detail: `edge ${u}-${w} is monochromatic (color ${color.get(u)})` };
+    }
+  }
+  return { ok: true, detail: `valid ${PETERSEN.k}-coloring` };
+}
+
+// Decode a SAT race solution into a vertex -> color map, the inverse of the engine's graphCNF dual
+// encoder (Lattice.SAT.Encode.cnfColoring): one boolean x_{v,c} per (vertex, color) lives at CNF
+// variable v*k + c (color c in 0..k-1), and a vertex's color is the c whose variable is true, reported
+// in the same 1..k labels the CP side uses (c -> c+1). The `solution` assignment is [variable, polarity]
+// in puzzle/variable coordinates (0-based variable, polarity 0/1), so a true polarity marks the color.
+function decodeSatColoring(assignment: [number, number][]): Map<number, number> {
+  const truth = new Map<number, number>(assignment); // variable -> polarity (0/1)
+  const color = new Map<number, number>();
+  for (let v = 0; v < PETERSEN.vertexCount; v++) {
+    for (let c = 0; c < PETERSEN.k; c++) {
+      if (truth.get(v * PETERSEN.k + c) === 1) {
+        color.set(v, c + 1);
+        break;
+      }
+    }
+  }
+  return color;
+}
+
 // The bundled nonogram fixtures (the same instances the client renders). The heart is the easy
 // round-trip picture; the hard one is a 7x7 that needs search past line arc-consistency, so its
 // stream must contain at least one backtrack (the programmatic VIZ-07 gate). Definitions carry the
@@ -354,10 +391,105 @@ function runCase(c: Case): Promise<{ name: string; ok: boolean; detail: string }
   });
 }
 
+// The race case (SAT-06 / CR-01): one `start` with engine "race" forks BOTH engines over one socket on
+// the SAME dual-encoded graph, every event engine-tagged. This is the headless peer of the two-panel UI
+// flow, the one race path that was previously only checked by a one-off probe. It asserts the contract
+// the panel split depends on:
+//   - EVERY streamed event carries an `engine` tag (an untagged event would be dropped by the split and
+//     cannot belong to a panel — threat T-05-22; one untagged event fails the case);
+//   - the stream routes into two independent reducer states by tag, exactly as `useSolver` does;
+//   - BOTH engines resolve (each reaches its own `solution`/`unsat`) on the genuinely same instance;
+//   - the CP side reconstructs a valid k-coloring (the existing checkGraphColoring) AND the SAT side's
+//     satisfying assignment decodes (via the graphCNF v*k+c map) to a valid k-coloring too.
+// The race runs in play mode (the server forks the two solve threads blocked on their gates), so the
+// client sends `play` after `start` to release both engines to completion rather than single-stepping.
+function runRaceCase(): Promise<{ name: string; ok: boolean; detail: string }> {
+  const name = "race-petersen";
+  return new Promise((resolve) => {
+    const ws = new WebSocket(SERVER);
+    // Two independent reducer states, one per engine, routed by the event's `engine` tag — the same
+    // split `useSolver` runs over the one socket. The SAT side seeds as a dimacs trail; it grows on
+    // demand as high-id variable events arrive, so the seed size is not load-bearing for the check.
+    const cp: ReplayState = initialStateForKind("graph", PETERSEN_DEF);
+    const sat: ReplayState = initialStateForKind(
+      "dimacs",
+      `p cnf ${PETERSEN.vertexCount * PETERSEN.k} 0\n`,
+    );
+    const states = { cp, sat };
+    // Each engine's `solution`/`unsat` payload, captured when it resolves; the case finishes once BOTH
+    // sides are set so neither engine's result is missed.
+    const result: { cp?: [number, number][] | "unsat"; sat?: [number, number][] | "unsat" } = {};
+    let untagged = 0;
+    let settled = false;
+    const finish = (ok: boolean, detail: string) => {
+      if (settled) return;
+      settled = true;
+      ws.close();
+      resolve({ name, ok, detail });
+    };
+
+    const tryComplete = () => {
+      if (result.cp === undefined || result.sat === undefined) return; // wait for both engines
+      if (untagged > 0) {
+        return finish(false, `${untagged} event(s) streamed without an engine tag (the split drops them)`);
+      }
+      if (result.cp === "unsat" || result.sat === "unsat") {
+        return finish(false, "an engine reported unsat for the 3-colorable petersen instance");
+      }
+      const cpCheck = checkGraphColoring(states.cp, result.cp);
+      if (!cpCheck.ok) return finish(false, `cp side: ${cpCheck.detail}`);
+      const satColoring = decodeSatColoring(result.sat);
+      const satCheck = validColoring(satColoring);
+      if (!satCheck.ok) return finish(false, `sat side: ${satCheck.detail}`);
+      const kc = states.cp.counters;
+      const ks = states.sat.counters;
+      finish(
+        true,
+        `both engines resolved on one tagged stream (cp ${cpCheck.detail.split(" (")[1]?.replace(")", "") ?? "valid"}; ` +
+          `sat valid ${PETERSEN.k}-coloring, ${ks.decisions} decisions / ${ks.propagations} propagations / ${kc.backtracks + ks.backtracks} backtracks total)`,
+      );
+    };
+
+    ws.addEventListener("open", () => {
+      ws.send(
+        JSON.stringify({ v: 1, t: "start", kind: "graph", puzzle: PETERSEN_DEF, mode: "trace", engine: "race" }),
+      );
+      // Release both engines: the race forks two solve threads blocked on their gates, and the play loop
+      // releases both per tick (no single-step). A fast speed keeps the small instance well inside the timeout.
+      ws.send(JSON.stringify({ v: 1, t: "play", speed: 200 }));
+    });
+
+    ws.addEventListener("message", (e) => {
+      const ev = parseEvent(String((e as MessageEvent).data));
+      if (!ev) return;
+      // The tag is the contract the panel split depends on: an untagged event cannot be routed. Count it
+      // (so the case fails) and skip it rather than corrupting a side.
+      if (ev.engine !== "cp" && ev.engine !== "sat") {
+        untagged++;
+        return;
+      }
+      const side = ev.engine; // "cp" | "sat"
+      states[side] = applyEvent(states[side], ev);
+      if (ev.t === "solution") {
+        if (result[side] === undefined) result[side] = ev.assignment;
+        tryComplete();
+      } else if (ev.t === "unsat") {
+        if (result[side] === undefined) result[side] = "unsat";
+        tryComplete();
+      }
+    });
+    ws.addEventListener("error", () => finish(false, "websocket error (is lattice-server on :8080?)"));
+    setTimeout(() => finish(false, "timed out waiting for both race engines to resolve"), 30000);
+  });
+}
+
 let allOk = true;
 for (const c of CASES) {
   const r = await runCase(c);
   console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.name}: ${r.detail}`);
   if (!r.ok) allOk = false;
 }
+const race = await runRaceCase();
+console.log(`${race.ok ? "PASS" : "FAIL"}  ${race.name}: ${race.detail}`);
+if (!race.ok) allOk = false;
 process.exit(allOk ? 0 : 1);
