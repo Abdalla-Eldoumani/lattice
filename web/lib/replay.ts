@@ -49,6 +49,10 @@ export interface ReplayState {
   learnedClause: number[] | null;
   lastReason: string;
   solved: boolean;
+  // Set on the engine's `unsat` event (a sound proof of no solution), the dead-end peer of `solved`.
+  // The panel reads it to show the UNSAT result line; without it an unsat run only shows as the
+  // "no solution" last-step text and a frozen trail, which a user can miss.
+  unsat: boolean;
 }
 
 export function cloneGrid(grid: Grid): Grid {
@@ -110,6 +114,7 @@ function emptyState(grid: Grid, size: number): ReplayState {
     learnedClause: null,
     lastReason: "",
     solved: false,
+    unsat: false,
   };
 }
 
@@ -377,7 +382,9 @@ export function applyEvent(state: ReplayState, ev: SolverEvent): ReplayState {
       return { ...state, grid, solved: true, currentDecision: null, lastReason: "solved" };
     }
     case "unsat":
-      return { ...state, lastReason: "no solution" };
+      // A sound proof of no solution: set the `unsat` flag (the dead-end peer of `solved`) so the
+      // panel renders a clear result line, not just the "no solution" last-step text.
+      return { ...state, unsat: true, currentDecision: null, lastReason: "no solution" };
     case "stats":
       // Stats carries the four CP counters authoritatively; the SAT counters are UI-derived, so keep
       // their running tally rather than zeroing them.
