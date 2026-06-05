@@ -9,7 +9,8 @@ import { type Engine, type PuzzleKind } from "../lib/protocol";
 import { PuzzleView } from "../components/PuzzleView";
 import { Minimap } from "../components/Minimap";
 import { HelpOverlay } from "../components/HelpOverlay";
-import { DEFAULT_PUZZLE_KEY, type PuzzleDef, PUZZLES } from "../lib/puzzles";
+import { DEFAULT_PUZZLE_KEY, findPresetKey, type PuzzleDef, PUZZLES } from "../lib/puzzles";
+import { buildShareUrl, decodeShare } from "../lib/share";
 
 // Which engines a given instance can run. A dimacs (raw CNF) instance is SAT-only. A dual-encodable
 // instance (graph, which the server builds as both a CP model and a CNF) offers cp, sat, and the
@@ -33,6 +34,17 @@ function engineOptionsFor(puzzle: PuzzleDef): { value: Engine; label: string }[]
 const FOCUS_RING =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-border-strong)]";
 
+// The synthetic picker key/label a shared permalink uses when its definition matches no preset (a
+// hand-edited or otherwise unknown instance). A shared link that DOES match a preset restores that
+// preset instead (findPresetKey), so this entry appears only for a genuinely off-preset instance, and
+// only while one is loaded. It carries the decoded kind so the renderer and the engine picker behave
+// exactly as they would for a real preset of that kind.
+const SHARED_PUZZLE_KEY = "shared";
+
+// How long the "link copied" confirmation stays up after a successful copy, in ms. Long enough to read,
+// short enough that the control bar returns to its resting label without a manual dismiss.
+const COPIED_FEEDBACK_MS = 2000;
+
 // The play-speed band the slider spans, in events/sec. It sits well inside the server's [0.1, 1000]
 // clamp (delayOf in app/server/Main.hs) so any value the slider can produce is honored verbatim, never
 // coerced. The default matches the speed the play control used before this control existed.
@@ -47,11 +59,53 @@ export default function Home() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(SPEED_DEFAULT);
   const [helpOpen, setHelpOpen] = useState(false);
+  // A shared off-preset instance restored from a permalink (lib/share.ts), or null. Holds the decoded
+  // { kind, definition } the synthetic "from link" picker entry renders. A shared link that matches a
+  // preset never lands here — it just selects that preset — so this is set only for an unknown instance.
+  const [sharedPuzzle, setSharedPuzzle] = useState<PuzzleDef | null>(null);
   // The "?" trigger, so the dialog returns focus here when it closes (the focus-return contract).
   const helpButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // Restore shared state from the URL hash on mount (VIZ permalinks). Read in an effect, after
+  // hydration, so the server and the first client render agree (no hash on the server) and there is no
+  // SSR mismatch — the same client-only pattern usePrefersReducedMotion uses. A malformed, oversized, or
+  // invalid hash decodes to null and is ignored, leaving the default instance; the engine is then
+  // re-validated by the engineValid path below, so an engine the kind cannot run is snapped to a legal
+  // one rather than sent to the server. Runs once; later in-app picker changes do not touch the hash.
+  useEffect(() => {
+    const decoded = decodeShare(window.location.hash);
+    if (!decoded) return;
+    const presetKey = findPresetKey(decoded.kind, decoded.definition);
+    if (presetKey) {
+      // A known fixture: select the real preset (its label, its dualEncodable flag) and drop the hash so
+      // the URL reads clean and a later in-app share rebuilds from the live selection.
+      setPuzzleKey(presetKey);
+      setSharedPuzzle(null);
+    } else {
+      // An off-preset instance: build a synthetic "from link" entry the picker and renderer treat like a
+      // real preset of that kind. dualEncodable is inferred from the kind (graph is the only one), so the
+      // engine picker offers the same options it would for that kind.
+      setSharedPuzzle({
+        kind: decoded.kind,
+        label: "from link",
+        definition: decoded.definition,
+        dualEncodable: decoded.kind === "graph",
+      });
+      setPuzzleKey(SHARED_PUZZLE_KEY);
+    }
+    setEngine(decoded.engine);
+    // Clear the hash without a reload so back/forward and a manual refresh do not re-trigger the restore
+    // and the address bar is not stuck on a long payload. The selection is already in React state.
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
+
   const n = solver.size;
   const box = Math.round(Math.sqrt(n));
-  const selected = PUZZLES[puzzleKey];
+  // The selected puzzle: a real preset by key, or the synthetic shared entry when the picker is on it.
+  // Falls back to the default preset if puzzleKey is somehow neither (it never is in practice).
+  const selected: PuzzleDef =
+    (puzzleKey === SHARED_PUZZLE_KEY ? sharedPuzzle : PUZZLES[puzzleKey]) ??
+    PUZZLES[DEFAULT_PUZZLE_KEY];
   const engineOptions = useMemo(() => engineOptionsFor(selected), [selected]);
   // Keep the engine valid for the selected puzzle: when the puzzle changes, snap the engine to the
   // first option it offers if the current choice is no longer available (e.g. switching to a dimacs
@@ -88,6 +142,36 @@ export default function Home() {
     },
     [playing, solver],
   );
+
+  // Share state: a short-lived "link copied" confirmation announced via an aria-live region (non-color
+  // feedback, VIZ-08), and a fallback URL shown when navigator.clipboard is unavailable so the user can
+  // still select and copy the link by hand. Both are cleared as the next share resets them.
+  const [shareStatus, setShareStatus] = useState("");
+  const [shareFallbackUrl, setShareFallbackUrl] = useState("");
+
+  // Build the permalink for the current selection (its kind + raw definition + effective engine — the
+  // engine actually validated for this kind, never a stale picker value) and copy it to the clipboard.
+  // navigator.clipboard is async and can reject (denied permission, insecure context); on any failure
+  // fall back to showing the URL in a read-only field the user can select. Encoding is total, so the
+  // build itself never throws. The confirmation auto-clears after COPIED_FEEDBACK_MS.
+  const onShare = useCallback(async () => {
+    const url = buildShareUrl(
+      { kind: selected.kind, engine: effectiveEngine, definition: selected.definition },
+      new URL(window.location.href),
+    );
+    setShareFallbackUrl("");
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(url);
+      setShareStatus("link copied");
+      window.setTimeout(() => setShareStatus(""), COPIED_FEEDBACK_MS);
+    } catch {
+      // No clipboard (older browser, insecure origin, or denied): surface the URL so the user can copy
+      // it manually. The status line points them at it; it stays until the next share.
+      setShareStatus("copy the link below");
+      setShareFallbackUrl(url);
+    }
+  }, [selected.kind, selected.definition, effectiveEngine]);
 
   // keyboard control (VIZ-08): space / right-arrow single-step, p toggles play/pause, ? or h opens the
   // shortcut help. The keys drive the SAME solver actions the buttons do (gate the animation, never the
@@ -161,6 +245,7 @@ export default function Home() {
             <Controls
               puzzleKey={puzzleKey}
               setPuzzleKey={setPuzzleKey}
+              sharedPuzzle={sharedPuzzle}
               engine={effectiveEngine}
               setEngine={setEngine}
               engineOptions={engineOptions}
@@ -168,6 +253,9 @@ export default function Home() {
               speed={speed}
               onSpeedChange={onSpeedChange}
               disabled={solver.conn !== "open"}
+              onShare={onShare}
+              shareStatus={shareStatus}
+              shareFallbackUrl={shareFallbackUrl}
               onStart={() => {
                 setPlaying(false);
                 solver.start(selected.definition, selected.kind, effectiveEngine);
@@ -199,6 +287,7 @@ export default function Home() {
             <Controls
               puzzleKey={puzzleKey}
               setPuzzleKey={setPuzzleKey}
+              sharedPuzzle={sharedPuzzle}
               engine={effectiveEngine}
               setEngine={setEngine}
               engineOptions={engineOptions}
@@ -206,6 +295,9 @@ export default function Home() {
               speed={speed}
               onSpeedChange={onSpeedChange}
               disabled={solver.conn !== "open"}
+              onShare={onShare}
+              shareStatus={shareStatus}
+              shareFallbackUrl={shareFallbackUrl}
               onStart={() => {
                 setPlaying(false);
                 solver.start(selected.definition, selected.kind, effectiveEngine);
@@ -326,6 +418,7 @@ function connLabel(conn: string): string {
 function Controls({
   puzzleKey,
   setPuzzleKey,
+  sharedPuzzle,
   engine,
   setEngine,
   engineOptions,
@@ -333,6 +426,9 @@ function Controls({
   speed,
   onSpeedChange,
   disabled,
+  onShare,
+  shareStatus,
+  shareFallbackUrl,
   onStart,
   onStep,
   onPlayPause,
@@ -340,6 +436,7 @@ function Controls({
 }: {
   puzzleKey: string;
   setPuzzleKey: (k: string) => void;
+  sharedPuzzle: PuzzleDef | null;
   engine: Engine;
   setEngine: (e: Engine) => void;
   engineOptions: { value: Engine; label: string }[];
@@ -347,6 +444,9 @@ function Controls({
   speed: number;
   onSpeedChange: (speed: number) => void;
   disabled: boolean;
+  onShare: () => void;
+  shareStatus: string;
+  shareFallbackUrl: string;
   onStart: () => void;
   onStep: () => void;
   onPlayPause: () => void;
@@ -364,6 +464,13 @@ function Controls({
           aria-label="puzzle"
           className={`rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-2 py-1.5 text-sm text-[color:var(--color-ink)] ${FOCUS_RING}`}
         >
+          {/* The "from link" entry exists only while a shared off-preset instance is loaded, so the
+              picker reflects the restored selection (VIZ permalinks). Selecting a real preset replaces
+              the page's selected puzzle; switching away from this entry leaves it visible (the shared
+              instance is still loadable) until a refresh, which is the intended sticky behavior. */}
+          {sharedPuzzle && (
+            <option value={SHARED_PUZZLE_KEY}>{sharedPuzzle.label}</option>
+          )}
           {Object.entries(PUZZLES).map(([k, p]) => (
             <option key={k} value={k}>
               {p.label}
@@ -397,7 +504,44 @@ function Controls({
         <Btn disabled={disabled} onClick={onRestart}>
           restart
         </Btn>
+        {/* Share: copies a permalink that reproduces the current instance (kind + engine + raw
+            definition, lib/share.ts). Styled like the secondary controls (FOCUS_RING, same border/
+            surface), with its own aria-label. It is NOT gated on the socket — a link describes the
+            selection, not the live solve, so it works offline. Its feedback is the aria-live line
+            below, never color alone. */}
+        <button
+          type="button"
+          onClick={onShare}
+          aria-label="copy a shareable link to this instance"
+          className={`rounded-[var(--radius-sm)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-2)] px-3 py-1.5 text-sm text-[color:var(--color-ink-dim)] transition-colors hover:text-[color:var(--color-ink)] ${FOCUS_RING}`}
+        >
+          share
+        </button>
       </div>
+      {/* The share confirmation: an aria-live region so a screen reader announces "link copied" (or the
+          fallback prompt) without relying on color — the text itself is the signal (VIZ-08). When the
+          clipboard is unavailable the URL is rendered in a read-only, full-width field the user can
+          select and copy by hand. The field auto-focuses+selects so a keyboard user can copy at once. */}
+      {(shareStatus || shareFallbackUrl) && (
+        <div aria-live="polite" className="flex w-full flex-col items-center gap-1.5">
+          {shareStatus && (
+            <span className="tabular text-xs text-[color:var(--color-ink-dim)]">
+              {shareStatus}
+            </span>
+          )}
+          {shareFallbackUrl && (
+            <input
+              type="text"
+              readOnly
+              value={shareFallbackUrl}
+              aria-label="shareable link"
+              onFocus={(e) => e.currentTarget.select()}
+              autoFocus
+              className={`tabular w-full max-w-md rounded-[var(--radius-sm)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-2 py-1 text-xs text-[color:var(--color-ink)] ${FOCUS_RING}`}
+            />
+          )}
+        </div>
+      )}
       {/* Play-speed control (VIZ): a real range input so it is keyboard-accessible (arrows step it),
           carrying its own focus ring and aria-label. The value is announced beside it in tabular mono
           (digits do not shift the layout) and is the non-color signal — the slider position is never
