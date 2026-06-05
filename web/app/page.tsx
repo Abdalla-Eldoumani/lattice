@@ -9,6 +9,8 @@ import { type Engine, type PuzzleKind } from "../lib/protocol";
 import { PuzzleView } from "../components/PuzzleView";
 import { Minimap } from "../components/Minimap";
 import { HelpOverlay } from "../components/HelpOverlay";
+import { ConflictExplainer } from "../components/ConflictExplainer";
+import { conflictIndexAtCursor, explainConflict } from "../lib/explain";
 import { DEFAULT_PUZZLE_KEY, findPresetKey, type PuzzleDef, PUZZLES } from "../lib/puzzles";
 import { buildShareUrl, decodeShare } from "../lib/share";
 
@@ -738,6 +740,29 @@ function ThinkingPanel({
   showSatCounters: boolean;
 }) {
   const d = solver.currentDecision;
+  // The conflict the viewer can inspect: the conflict event at (or most recently before) the current
+  // cursor, reconstructed by the pure analyzer from the buffered events. Recomputed whenever the cursor
+  // or the buffer grows, so scrubbing onto a conflict and inspecting it shows THAT conflict (and a live
+  // solve sitting on a fresh conflict offers it too). Null when no conflict precedes the cursor.
+  const conflictIndex = useMemo(
+    () => conflictIndexAtCursor(solver.events, solver.cursor),
+    [solver.events, solver.cursor, solver.eventCount],
+  );
+  const explanation = useMemo(
+    () => (conflictIndex >= 0 ? explainConflict(solver.events, conflictIndex) : null),
+    [solver.events, conflictIndex, solver.eventCount],
+  );
+  // Whether the explainer panel is open. It auto-closes when the inspectable conflict changes (the
+  // viewer scrubbed to a different conflict / past all conflicts), so the open panel never describes a
+  // stale event — they re-open it for the new one. Tracked by the conflict's index so a same-index
+  // recompute (e.g. the buffer grew) keeps it open.
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  useEffect(() => {
+    // Close the panel if the conflict it described is no longer the inspectable one.
+    if (openIndex !== null && openIndex !== conflictIndex) setOpenIndex(null);
+  }, [conflictIndex, openIndex]);
+  const explainerOpen = openIndex !== null && openIndex === conflictIndex && explanation !== null;
+
   return (
     <aside className="flex flex-col gap-5 rounded-[var(--radius-md)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-5">
       <h2 className="font-[family-name:var(--font-display)] text-lg">thinking</h2>
@@ -761,6 +786,31 @@ function ThinkingPanel({
           </span>
         </div>
       </div>
+
+      {/* The conflict-inspect affordance + panel. When the cursor sits on (or just past) a conflict, a
+          real focusable "explain" button appears; pressing it opens the ConflictExplainer with that
+          conflict's faithful explanation. Reachable on a live solve and when scrubbed onto a conflict
+          via the scrubber (both feed the cursor). When no conflict precedes the cursor, neither the
+          button nor the panel renders. */}
+      {explanation !== null && (
+        <div className="flex flex-col gap-3">
+          {!explainerOpen && (
+            <button
+              type="button"
+              onClick={() => setOpenIndex(conflictIndex)}
+              aria-label={`explain the conflict at ${
+                explanation.engine === "sat" ? "variable" : "cell"
+              } ${explanation.cell}`}
+              className={`self-start rounded-[var(--radius-sm)] border border-[color:var(--color-state-conflict)] bg-[color:var(--color-surface-2)] px-3 py-1 text-sm text-[color:var(--color-state-conflict)] transition-colors hover:bg-[color:var(--color-surface)] ${FOCUS_RING}`}
+            >
+              explain conflict
+            </button>
+          )}
+          {explainerOpen && (
+            <ConflictExplainer explanation={explanation} onClose={() => setOpenIndex(null)} />
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5 border-t border-[color:var(--color-border)] pt-4">
         <Counter label="decisions" value={solver.counters.decisions} />
