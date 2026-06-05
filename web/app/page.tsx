@@ -32,11 +32,19 @@ function engineOptionsFor(puzzle: PuzzleDef): { value: Engine; label: string }[]
 const FOCUS_RING =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-border-strong)]";
 
+// The play-speed band the slider spans, in events/sec. It sits well inside the server's [0.1, 1000]
+// clamp (delayOf in app/server/Main.hs) so any value the slider can produce is honored verbatim, never
+// coerced. The default matches the speed the play control used before this control existed.
+const SPEED_MIN = 1;
+const SPEED_MAX = 60;
+const SPEED_DEFAULT = 12;
+
 export default function Home() {
   const solver = useSolver();
   const [puzzleKey, setPuzzleKey] = useState(DEFAULT_PUZZLE_KEY);
   const [engine, setEngine] = useState<Engine>("cp");
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(SPEED_DEFAULT);
   const n = solver.size;
   const box = Math.round(Math.sqrt(n));
   const selected = PUZZLES[puzzleKey];
@@ -60,10 +68,22 @@ export default function Home() {
       solver.pause();
       setPlaying(false);
     } else {
-      solver.play(12);
+      solver.play(speed);
       setPlaying(true);
     }
-  }, [playing, solver]);
+  }, [playing, solver, speed]);
+
+  // Changing the speed mid-play re-sends play(newSpeed) so the new cadence takes effect immediately
+  // (the server's check-and-set Play supersedes the running loop rather than stacking a second one).
+  // While paused it only records the value, which the next play picks up. Works in both single-engine
+  // and race modes — play/pause drives the one control bar over the same socket in either.
+  const onSpeedChange = useCallback(
+    (next: number) => {
+      setSpeed(next);
+      if (playing) solver.play(next);
+    },
+    [playing, solver],
+  );
 
   // keyboard control (VIZ-08): space / right-arrow single-step, p toggles play/pause. The keys drive
   // the SAME solver actions the buttons do (gate the animation, never the state — the step path is
@@ -112,6 +132,8 @@ export default function Home() {
               setEngine={setEngine}
               engineOptions={engineOptions}
               playing={playing}
+              speed={speed}
+              onSpeedChange={onSpeedChange}
               disabled={solver.conn !== "open"}
               onStart={() => {
                 setPlaying(false);
@@ -148,6 +170,8 @@ export default function Home() {
               setEngine={setEngine}
               engineOptions={engineOptions}
               playing={playing}
+              speed={speed}
+              onSpeedChange={onSpeedChange}
               disabled={solver.conn !== "open"}
               onStart={() => {
                 setPlaying(false);
@@ -267,6 +291,8 @@ function Controls({
   setEngine,
   engineOptions,
   playing,
+  speed,
+  onSpeedChange,
   disabled,
   onStart,
   onStep,
@@ -279,6 +305,8 @@ function Controls({
   setEngine: (e: Engine) => void;
   engineOptions: { value: Engine; label: string }[];
   playing: boolean;
+  speed: number;
+  onSpeedChange: (speed: number) => void;
   disabled: boolean;
   onStart: () => void;
   onStep: () => void;
@@ -330,6 +358,35 @@ function Controls({
         <Btn disabled={disabled} onClick={onRestart}>
           restart
         </Btn>
+      </div>
+      {/* Play-speed control (VIZ): a real range input so it is keyboard-accessible (arrows step it),
+          carrying its own focus ring and aria-label. The value is announced beside it in tabular mono
+          (digits do not shift the layout) and is the non-color signal — the slider position is never
+          the only cue. accent-* tints the native thumb/track with the one theme accent. The band sits
+          inside the server's [0.1, 1000] clamp, so any value here is honored. */}
+      <div className="flex items-center gap-2">
+        <label
+          htmlFor="play-speed"
+          className="text-xs text-[color:var(--color-ink-mute)]"
+        >
+          speed
+        </label>
+        <input
+          id="play-speed"
+          type="range"
+          min={SPEED_MIN}
+          max={SPEED_MAX}
+          step={1}
+          value={speed}
+          disabled={disabled}
+          onChange={(e) => onSpeedChange(Number(e.target.value))}
+          aria-label="play speed (events per second)"
+          aria-valuetext={`${speed} events per second`}
+          className={`h-1 w-32 cursor-pointer accent-[color:var(--color-accent)] disabled:opacity-40 ${FOCUS_RING}`}
+        />
+        <span className="tabular w-16 text-xs text-[color:var(--color-ink-dim)]">
+          {speed} ev/s
+        </span>
       </div>
       <span className="text-xs text-[color:var(--color-ink-mute)]">
         hard presets make the search visibly backtrack
