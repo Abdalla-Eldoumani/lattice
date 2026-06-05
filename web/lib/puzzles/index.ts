@@ -184,3 +184,15 @@ export const PUZZLES: Record<string, PuzzleDef> = {
 
 // The default picker selection on first paint.
 export const DEFAULT_PUZZLE_KEY = "sudoku-easy";
+
+// Find the preset key whose kind and exact definition match the given pair, or null if none does. A
+// shared permalink (lib/share.ts) uses this so a link that points at a known fixture restores the real
+// preset entry (its label, its dualEncodable flag) rather than an anonymous "from link" entry. The
+// match is on the raw definition string, so a shared link built from a preset round-trips to that same
+// preset; a hand-crafted or edited definition that matches nothing returns null and shows as "from link".
+export function findPresetKey(kind: PuzzleKind, definition: string): string | null {
+  for (const [key, p] of Object.entries(PUZZLES)) {
+    if (p.kind === kind && p.definition === definition) return key;
+  }
+  return null;
+}
