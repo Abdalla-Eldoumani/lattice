@@ -38,6 +38,7 @@ export interface RaceSide {
   learnedClause: number[] | null;
   lastReason: string;
   solved: boolean;
+  unsat: boolean;
   minimap: MinimapState;
   kind: PuzzleKind;
 }
@@ -51,6 +52,9 @@ export interface SolverState {
   learnedClause: number[] | null;
   lastReason: string;
   solved: boolean;
+  // Set on the engine's `unsat` event (the dead-end peer of `solved`), so the panel can show a clear
+  // result line for a sound proof of no solution rather than only the "no solution" last-step text.
+  unsat: boolean;
   // the search-tree the minimap draws, built by the parallel reducer from the same event stream.
   minimap: MinimapState;
   conn: ConnState;
@@ -221,6 +225,7 @@ export function useSolver(): SolverState {
       learnedClause: view.learnedClause,
       lastReason: view.lastReason,
       solved: view.solved,
+      unsat: view.unsat,
       minimap,
       conn,
       race,
@@ -246,6 +251,7 @@ function sideOf(m: RaceModel): RaceSide {
     learnedClause: m.state.learnedClause,
     lastReason: m.state.lastReason,
     solved: m.state.solved,
+    unsat: m.state.unsat,
     minimap: m.minimap,
     kind: m.kind,
   };
