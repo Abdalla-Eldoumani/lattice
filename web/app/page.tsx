@@ -4,11 +4,13 @@
 // step/play/pause/restart controls that drive it, and the thinking panel with the live counters.
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { type RaceSide, useSolver } from "../lib/useSolver";
 import { type Engine, type PuzzleKind } from "../lib/protocol";
 import { PuzzleView } from "../components/PuzzleView";
 import { Minimap } from "../components/Minimap";
 import { HelpOverlay } from "../components/HelpOverlay";
+import { Tour } from "../components/Tour";
 import { ConflictExplainer } from "../components/ConflictExplainer";
 import { conflictIndexAtCursor, explainConflict } from "../lib/explain";
 import { DEFAULT_PUZZLE_KEY, findPresetKey, type PuzzleDef, PUZZLES } from "../lib/puzzles";
@@ -61,6 +63,11 @@ export default function Home() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(SPEED_DEFAULT);
   const [helpOpen, setHelpOpen] = useState(false);
+  // The guided tour (VIZ extras): an on-demand stepper over the page regions, opened from the header.
+  // It is modal like the help overlay — while it is open the page's window key handler is suppressed
+  // (the `tourOpen` gate below), so the dialog owns the keyboard and the solver shortcuts do not fire.
+  const [tourOpen, setTourOpen] = useState(false);
+  const tourButtonRef = useRef<HTMLButtonElement | null>(null);
   // A shared off-preset instance restored from a permalink (lib/share.ts), or null. Holds the decoded
   // { kind, definition } the synthetic "from link" picker entry renders. A shared link that matches a
   // preset never lands here — it just selects that preset — so this is set only for an unknown instance.
@@ -192,6 +199,9 @@ export default function Home() {
       const el = e.target as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      // The tour is modal and owns the keyboard while open (it has its own ESC/arrows/Tab handling), so
+      // every page key is suppressed here, exactly as for the help dialog below.
+      if (tourOpen) return;
       // The help toggle: `?` (Shift+/ on most layouts reports key "?") or `h`. It is the one key that
       // works while the dialog is closed without a live solver. Once the dialog is open the overlay traps
       // its own keys, so this window path never reopens it.
@@ -228,7 +238,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [solver, onPlayPause, helpOpen]);
+  }, [solver, onPlayPause, helpOpen, tourOpen]);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-8 px-6 py-12">
@@ -240,6 +250,28 @@ export default function Home() {
           <span className="tabular text-xs text-[color:var(--color-ink-mute)]">
             {connLabel(solver.conn)}
           </span>
+          {/* The explainer link: a real route to the "how it works" page. A plain anchor (Next Link) so
+              it is keyboard-reachable with the shared focus ring and an aria-label naming the destination. */}
+          <Link
+            href="/about"
+            aria-label="how lattice works"
+            className={`rounded-[var(--radius-sm)] text-sm text-[color:var(--color-accent)] transition-colors hover:text-[color:var(--color-accent-dim)] ${FOCUS_RING}`}
+          >
+            how it works
+          </Link>
+          {/* The tour trigger: opens the guided tour stepper. aria-haspopup="dialog" + aria-expanded so a
+              screen reader announces it opens a modal and its state, the same contract as the help button. */}
+          <button
+            ref={tourButtonRef}
+            type="button"
+            onClick={() => setTourOpen(true)}
+            aria-label="take a guided tour of the visualizer"
+            aria-haspopup="dialog"
+            aria-expanded={tourOpen}
+            className={`rounded-[var(--radius-sm)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-2)] px-2 py-0.5 text-sm text-[color:var(--color-ink-dim)] transition-colors hover:text-[color:var(--color-ink)] ${FOCUS_RING}`}
+          >
+            tour
+          </button>
           {/* The help trigger: opens the shortcut dialog. aria-haspopup="dialog" + aria-expanded so a
               screen reader announces it opens a modal and its current state. The `?` glyph is the label
               (aria-label carries the readable name) — the same affordance the `?`/`h` key invokes. */}
@@ -298,54 +330,65 @@ export default function Home() {
       ) : (
         <div className="grid gap-8 lg:grid-cols-[auto_1fr]">
           <section className="flex flex-col items-center gap-5">
-            <PuzzleView
-              kind={selected.kind}
-              grid={solver.grid}
-              n={n}
-              box={box}
-              definition={selected.definition}
-              learnedClause={solver.learnedClause}
-            />
-            <Controls
-              puzzleKey={puzzleKey}
-              setPuzzleKey={setPuzzleKey}
-              sharedPuzzle={sharedPuzzle}
-              engine={effectiveEngine}
-              setEngine={setEngine}
-              engineOptions={engineOptions}
-              playing={playing}
-              speed={speed}
-              onSpeedChange={onSpeedChange}
-              disabled={solver.conn !== "open"}
-              onShare={onShare}
-              shareStatus={shareStatus}
-              shareFallbackUrl={shareFallbackUrl}
-              onStart={() => {
-                setPlaying(false);
-                solver.start(selected.definition, selected.kind, effectiveEngine);
-              }}
-              onStep={solver.step}
-              onPlayPause={onPlayPause}
-              onRestart={() => {
-                setPlaying(false);
-                solver.restart();
-              }}
-            />
+            {/* data-tour-id wrappers mark the regions the guided tour outlines. Each keeps the
+                section's centering so it does not change the layout; the tour reads their bounding rect
+                to draw an accent ring (Tour.tsx). */}
+            <div data-tour-id="puzzle" className="flex flex-col items-center">
+              <PuzzleView
+                kind={selected.kind}
+                grid={solver.grid}
+                n={n}
+                box={box}
+                definition={selected.definition}
+                learnedClause={solver.learnedClause}
+              />
+            </div>
+            <div data-tour-id="controls" className="flex w-full flex-col items-center">
+              <Controls
+                puzzleKey={puzzleKey}
+                setPuzzleKey={setPuzzleKey}
+                sharedPuzzle={sharedPuzzle}
+                engine={effectiveEngine}
+                setEngine={setEngine}
+                engineOptions={engineOptions}
+                playing={playing}
+                speed={speed}
+                onSpeedChange={onSpeedChange}
+                disabled={solver.conn !== "open"}
+                onShare={onShare}
+                shareStatus={shareStatus}
+                shareFallbackUrl={shareFallbackUrl}
+                onStart={() => {
+                  setPlaying(false);
+                  solver.start(selected.definition, selected.kind, effectiveEngine);
+                }}
+                onStep={solver.step}
+                onPlayPause={onPlayPause}
+                onRestart={() => {
+                  setPlaying(false);
+                  solver.restart();
+                }}
+              />
+            </div>
             {/* The event scrubber: replay/step-back through the events already received. Single-engine
                 only (the race is play-only — see docs/VISUALIZER.md), so it never renders in the race layout
                 above. Disabled until the buffer has events. */}
-            <Scrubber
-              count={solver.eventCount}
-              cursor={solver.cursor}
-              following={solver.following}
-              onSeek={solver.seek}
-              onStepBack={solver.stepBack}
-              onStepForward={solver.stepForward}
-              onJumpToLive={solver.jumpToLive}
-            />
+            <div data-tour-id="scrubber" className="flex w-full flex-col items-center">
+              <Scrubber
+                count={solver.eventCount}
+                cursor={solver.cursor}
+                following={solver.following}
+                onSeek={solver.seek}
+                onStepBack={solver.stepBack}
+                onStepForward={solver.stepForward}
+                onJumpToLive={solver.jumpToLive}
+              />
+            </div>
           </section>
 
-          <ThinkingPanel solver={solver} showSatCounters={showSatCounters} />
+          <div data-tour-id="thinking">
+            <ThinkingPanel solver={solver} showSatCounters={showSatCounters} />
+          </div>
         </div>
       )}
 
@@ -353,6 +396,12 @@ export default function Home() {
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         returnFocusRef={helpButtonRef}
+      />
+
+      <Tour
+        open={tourOpen}
+        onClose={() => setTourOpen(false)}
+        returnFocusRef={tourButtonRef}
       />
     </main>
   );
@@ -827,7 +876,7 @@ function ThinkingPanel({
         )}
       </div>
 
-      <div className="border-t border-[color:var(--color-border)] pt-4">
+      <div data-tour-id="minimap" className="border-t border-[color:var(--color-border)] pt-4">
         <Minimap minimap={solver.minimap} />
       </div>
 
