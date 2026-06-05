@@ -3,11 +3,12 @@
 // The Sudoku visualizer (VIZ-01/02/03): a 9x9 grid that animates the engine's event stream, the
 // step/play/pause/restart controls that drive it, and the thinking panel with the live counters.
 
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type RaceSide, useSolver } from "../lib/useSolver";
 import { type Engine, type PuzzleKind } from "../lib/protocol";
 import { PuzzleView } from "../components/PuzzleView";
 import { Minimap } from "../components/Minimap";
+import { HelpOverlay } from "../components/HelpOverlay";
 import { DEFAULT_PUZZLE_KEY, type PuzzleDef, PUZZLES } from "../lib/puzzles";
 
 // Which engines a given instance can run. A dimacs (raw CNF) instance is SAT-only. A dual-encodable
@@ -45,6 +46,9 @@ export default function Home() {
   const [engine, setEngine] = useState<Engine>("cp");
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(SPEED_DEFAULT);
+  const [helpOpen, setHelpOpen] = useState(false);
+  // The "?" trigger, so the dialog returns focus here when it closes (the focus-return contract).
+  const helpButtonRef = useRef<HTMLButtonElement | null>(null);
   const n = solver.size;
   const box = Math.round(Math.sqrt(n));
   const selected = PUZZLES[puzzleKey];
@@ -85,16 +89,29 @@ export default function Home() {
     [playing, solver],
   );
 
-  // keyboard control (VIZ-08): space / right-arrow single-step, p toggles play/pause. The keys drive
-  // the SAME solver actions the buttons do (gate the animation, never the state — the step path is
-  // the real state update). Keys are ignored while focus is in the picker or any text field so the
-  // native select keyboard still works, and space's default page scroll is prevented.
+  // keyboard control (VIZ-08): space / right-arrow single-step, p toggles play/pause, ? or h opens the
+  // shortcut help. The keys drive the SAME solver actions the buttons do (gate the animation, never the
+  // state — the step path is the real state update). Keys are ignored while focus is in the picker or any
+  // text field so the native select/range keyboard still works, and space's default page scroll is
+  // prevented. The help key works regardless of connection (it is documentation, not a solver action);
+  // the solver keys require an open socket. While the help dialog is open the solver keys are suppressed
+  // so the dialog's own ESC/Tab handling (focus trap, close) owns the keyboard.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || solver.conn !== "open") return;
+      if (e.defaultPrevented) return;
       const el = e.target as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      // The help toggle: `?` (Shift+/ on most layouts reports key "?") or `h`. It is the one key that
+      // works while the dialog is closed without a live solver. Once the dialog is open the overlay traps
+      // its own keys, so this window path never reopens it.
+      if (!helpOpen && (e.key === "?" || e.key === "h" || e.key === "H")) {
+        e.preventDefault();
+        setHelpOpen(true);
+        return;
+      }
+      // The solver keys: only when the socket is open and the help dialog is not capturing the keyboard.
+      if (helpOpen || solver.conn !== "open") return;
       if (e.key === " " || e.key === "ArrowRight") {
         e.preventDefault(); // space would otherwise scroll the page
         solver.step();
@@ -105,7 +122,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [solver, onPlayPause]);
+  }, [solver, onPlayPause, helpOpen]);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-8 px-6 py-12">
@@ -113,9 +130,25 @@ export default function Home() {
         <h1 className="font-[family-name:var(--font-display)] text-4xl font-normal tracking-tight">
           lattice
         </h1>
-        <span className="tabular text-xs text-[color:var(--color-ink-mute)]">
-          {connLabel(solver.conn)}
-        </span>
+        <div className="flex items-baseline gap-4">
+          <span className="tabular text-xs text-[color:var(--color-ink-mute)]">
+            {connLabel(solver.conn)}
+          </span>
+          {/* The help trigger: opens the shortcut dialog. aria-haspopup="dialog" + aria-expanded so a
+              screen reader announces it opens a modal and its current state. The `?` glyph is the label
+              (aria-label carries the readable name) — the same affordance the `?`/`h` key invokes. */}
+          <button
+            ref={helpButtonRef}
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            aria-label="keyboard shortcuts"
+            aria-haspopup="dialog"
+            aria-expanded={helpOpen}
+            className={`rounded-[var(--radius-sm)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-2)] px-2 py-0.5 text-sm text-[color:var(--color-ink-dim)] transition-colors hover:text-[color:var(--color-ink)] ${FOCUS_RING}`}
+          >
+            ?
+          </button>
+        </div>
       </header>
 
       {racing && solver.race ? (
@@ -189,6 +222,12 @@ export default function Home() {
           <ThinkingPanel solver={solver} showSatCounters={showSatCounters} />
         </div>
       )}
+
+      <HelpOverlay
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        returnFocusRef={helpButtonRef}
+      />
     </main>
   );
 }
