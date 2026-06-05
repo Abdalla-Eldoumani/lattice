@@ -112,10 +112,10 @@ export default function About() {
         </P>
         <P>
           When a clause is falsified, that is a conflict, and this is where CDCL earns its name. The engine
-          analyses the conflict back through the trail to find the smallest set of choices that caused it,
-          and from that derives a brand-new clause &mdash; a <Term>learned clause</Term> &mdash; that
-          records the dead end so it is never repeated. (The analysis stops at the &ldquo;first unique
-          implication point&rdquo;, which is the precise rule that makes the learned clause useful.) It
+          traces the conflict back through the trail to the choices that forced it, and from that derives a
+          brand-new clause &mdash; a <Term>learned clause</Term> &mdash; that records the dead end so it is
+          never repeated. (The analysis stops at the &ldquo;first unique implication point&rdquo;, which is
+          the precise rule that decides which clause to learn.) It
           then jumps straight back to the decision level that learned clause points to, rather than undoing
           one level at a time &mdash; <Term>non-chronological backjumping</Term> &mdash; and carries on.
           The learned clause shown in the panel is the engine&rsquo;s own deduction; that is the one
