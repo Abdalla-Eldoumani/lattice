@@ -176,10 +176,15 @@ export function useSolver(): SolverState {
   // the seed, and publish it. The pure reducers make a prefix replay total and deterministic, so this
   // never throws and produces exactly the state that existed after `index` events. Updates the cursor
   // refs/state in lockstep so `following` and the keyboard step paths stay consistent.
+  //
+  // The replay starts from a FRESH copy of the seed's snapshot map. replay.ts carries and mutates the
+  // CP `snapshots` Map in place (it is the only mutable-in-place field), so reusing the seed object
+  // across renderAt calls would let one replay's level snapshots leak into the next and a CP backtrack
+  // restore a stale grid. A fresh empty Map per replay keeps each scrub independent and faithful.
   const renderAt = useCallback((index: number) => {
     const events = eventsRef.current;
     const clamped = Math.max(0, Math.min(index, events.length));
-    let s = seedStateRef.current;
+    let s: ReplayState = { ...seedStateRef.current, snapshots: new Map() };
     let m = seedMinimapRef.current;
     for (let i = 0; i < clamped; i++) {
       s = applyEvent(s, events[i]);
