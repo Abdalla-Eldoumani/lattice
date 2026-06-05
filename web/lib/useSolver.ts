@@ -12,6 +12,7 @@ import {
   type PuzzleKind,
   SOLVER_WS_URL,
   type SolverControl,
+  type SolverEvent,
 } from "./protocol";
 import {
   applyEvent,
@@ -62,6 +63,26 @@ export interface SolverState {
   // events; each event is routed by its `engine` tag into the matching side. Null for a single-engine
   // solve, which keeps the single-model fields above unchanged.
   race: { cp: RaceSide; sat: RaceSide } | null;
+  // ---- The single-engine event scrubber (step-back timeline). ----------------------------------
+  // The number of events received so far for the current single-engine solve (the live edge). Zero
+  // before a start, and on every event arrival the buffer grows by one. Always 0 in race mode (the
+  // race is play-only and not scrubbable), so the UI hides the scrubber there.
+  eventCount: number;
+  // The index up to which the rendered view (grid/minimap/counters/...) is reconstructed: 0 is the
+  // seed (before any event), `eventCount` is the live edge. The view above always reflects THIS
+  // position, so the whole panel shows one consistent historical moment.
+  cursor: number;
+  // True when the cursor is at the live edge (cursor === eventCount): incoming events keep advancing
+  // the view. False while scrubbed back into history; new events then grow the buffer but do not move
+  // the view. Also true (vacuously) in race mode, where the scrubber is inert.
+  following: boolean;
+  // Move the view to a specific event index (clamped to [0, eventCount]). A no-op in race mode.
+  seek: (index: number) => void;
+  // Step the view one event backward / forward through the received history (clamped). No-op in race.
+  stepBack: () => void;
+  stepForward: () => void;
+  // Snap the view back to the live edge and resume following incoming events.
+  jumpToLive: () => void;
   start: (puzzle: string, kind: PuzzleKind, engine?: Engine) => void;
   step: () => void;
   play: (speed: number) => void;
@@ -114,21 +135,60 @@ export function useSolver(): SolverState {
   const [minimap, setMinimap] = useState<MinimapState>(() => initialMinimap());
   const [conn, setConn] = useState<ConnState>("connecting");
   const [race, setRace] = useState<{ cp: RaceSide; sat: RaceSide } | null>(null);
+  // The scrubber's two render-driving numbers. `eventCount` is the live edge (the buffer length);
+  // `cursor` is the position the view is reconstructed to. Both are 0 until the first event arrives.
+  const [eventCount, setEventCount] = useState(0);
+  const [cursor, setCursor] = useState(0);
 
   const ws = useRef<WebSocket | null>(null);
+  // The LIVE reducers: they always advance as events arrive, so following the live edge stays an O(1)
+  // incremental apply per event (never a full re-replay). When the user scrubs back, the rendered view
+  // is recomputed from the seed over a prefix instead, but these keep moving so jumping to live is free.
   const stateRef = useRef<ReplayState>(view);
   const minimapRef = useRef<MinimapState>(minimap);
+  // The ordered event buffer for the current single-engine solve, and the cursor mirror the render
+  // reads. The buffer is the history the scrubber replays a prefix of; it is reset on start/restart and
+  // never populated in race mode. `cursorRef` mirrors the `cursor` state so the message handler can
+  // decide follow-vs-stay without going through a render.
+  const eventsRef = useRef<SolverEvent[]>([]);
+  const cursorRef = useRef(0);
+  // The single-engine seed (the model before any event), kept so a scrub can replay events[0..k] from
+  // a clean start without re-parsing the definition. Reset alongside the buffer on start/restart.
+  const seedStateRef = useRef<ReplayState>(view);
+  const seedMinimapRef = useRef<MinimapState>(minimap);
   const puzzleRef = useRef<string>("");
   const kindRef = useRef<PuzzleKind>("sudoku");
   const engineRef = useRef<Engine>("cp");
   // The two race models, mutated in lockstep with the single-engine refs. Null when no race runs.
   const raceRef = useRef<{ cp: RaceModel; sat: RaceModel } | null>(null);
 
+  // Push the rendered view from whichever model is at the cursor. In race mode the single-engine view
+  // is irrelevant (the panels read `race`); in single-engine mode the view reflects the cursor: the
+  // live refs when following the edge, or a from-seed replay of events[0..cursor] when scrubbed back.
   const sync = useCallback(() => {
     setView({ ...stateRef.current });
     setMinimap(minimapRef.current);
     const r = raceRef.current;
     setRace(r ? { cp: sideOf(r.cp), sat: sideOf(r.sat) } : null);
+  }, []);
+
+  // Reconstruct the view at `index` (clamped to [0, buffer length]) by replaying events[0..index] from
+  // the seed, and publish it. The pure reducers make a prefix replay total and deterministic, so this
+  // never throws and produces exactly the state that existed after `index` events. Updates the cursor
+  // refs/state in lockstep so `following` and the keyboard step paths stay consistent.
+  const renderAt = useCallback((index: number) => {
+    const events = eventsRef.current;
+    const clamped = Math.max(0, Math.min(index, events.length));
+    let s = seedStateRef.current;
+    let m = seedMinimapRef.current;
+    for (let i = 0; i < clamped; i++) {
+      s = applyEvent(s, events[i]);
+      m = applyMinimapEvent(m, events[i]);
+    }
+    cursorRef.current = clamped;
+    setCursor(clamped);
+    setView({ ...s });
+    setMinimap(m);
   }, []);
 
   const send = useCallback((msg: SolverControl) => {
@@ -160,11 +220,22 @@ export function useSolver(): SolverState {
         }
         return;
       }
-      // Single-engine mode (unchanged): apply the same event to both reducers — the cell-state model
-      // the grid renders and the search-tree the minimap renders — in lockstep with one event stream.
+      // Single-engine mode: buffer the event so the scrubber can replay any prefix later, and advance
+      // the LIVE reducers in lockstep with the stream (the cell-state model the grid renders and the
+      // search-tree the minimap renders). The live refs always move so following the edge stays an
+      // incremental apply; the buffer always grows so a scrubbed-back viewer never loses an event.
+      eventsRef.current.push(ev);
       stateRef.current = applyEvent(stateRef.current, ev);
       minimapRef.current = applyMinimapEvent(minimapRef.current, ev);
-      sync();
+      const count = eventsRef.current.length;
+      setEventCount(count);
+      // Following the live edge: advance the cursor with the buffer and publish the live view. Scrubbed
+      // back: keep the view pinned at the cursor (do not yank the viewer to live) — only the count grew.
+      if (cursorRef.current === count - 1) {
+        cursorRef.current = count;
+        setCursor(count);
+        sync();
+      }
     };
     return () => socket.close();
   }, [sync]);
@@ -186,6 +257,14 @@ export function useSolver(): SolverState {
         stateRef.current = initialStateForKind(kind, puzzle);
         minimapRef.current = initialMinimap();
       }
+      // Reset the scrubber: a fresh buffer seeded from this instance's start model, the cursor at the
+      // (empty) live edge. Keeping the seed lets a later scrub replay events[0..k] from a clean start.
+      eventsRef.current = [];
+      seedStateRef.current = stateRef.current;
+      seedMinimapRef.current = minimapRef.current;
+      cursorRef.current = 0;
+      setEventCount(0);
+      setCursor(0);
       sync();
       // The engine field is additive: absent defaults to cp on the server (the existing CP path). The
       // picker passes sat for a dimacs instance and cp/sat/race per the user's choice. The one start
@@ -212,9 +291,45 @@ export function useSolver(): SolverState {
       stateRef.current = initialStateForKind(kindRef.current, puzzleRef.current);
       minimapRef.current = initialMinimap();
     }
+    // Restart reseeds the same instance, so the buffer is cleared the same way `start` does and the
+    // cursor returns to the empty live edge — the prior solve's history is gone.
+    eventsRef.current = [];
+    seedStateRef.current = stateRef.current;
+    seedMinimapRef.current = minimapRef.current;
+    cursorRef.current = 0;
+    setEventCount(0);
+    setCursor(0);
     sync();
     send({ v: PROTOCOL_VERSION, t: "restart" });
   }, [send, sync]);
+
+  // The scrubber actions. All are no-ops in race mode (the buffer is empty there, so renderAt's clamp
+  // would still leave the view at the seed; the explicit guard documents the intent and skips the work).
+  // `seek` re-renders the view at an absolute index; the step actions move relative to the current
+  // cursor; `jumpToLive` snaps to the live edge (the buffer length). renderAt clamps every index.
+  const seek = useCallback(
+    (index: number) => {
+      if (raceRef.current) return;
+      renderAt(index);
+    },
+    [renderAt],
+  );
+  const stepBack = useCallback(() => {
+    if (raceRef.current) return;
+    renderAt(cursorRef.current - 1);
+  }, [renderAt]);
+  const stepForward = useCallback(() => {
+    if (raceRef.current) return;
+    renderAt(cursorRef.current + 1);
+  }, [renderAt]);
+  const jumpToLive = useCallback(() => {
+    if (raceRef.current) return;
+    renderAt(eventsRef.current.length);
+  }, [renderAt]);
+
+  // Following the live edge: the cursor sits at the buffer end, so incoming events advance the view.
+  // Vacuously true before any event (0 === 0) and in race mode (both 0), where the scrubber is inert.
+  const following = cursor === eventCount;
 
   return useMemo(
     () => ({
@@ -229,13 +344,37 @@ export function useSolver(): SolverState {
       minimap,
       conn,
       race,
+      eventCount,
+      cursor,
+      following,
+      seek,
+      stepBack,
+      stepForward,
+      jumpToLive,
       start,
       step,
       play,
       pause,
       restart,
     }),
-    [view, minimap, conn, race, start, step, play, pause, restart],
+    [
+      view,
+      minimap,
+      conn,
+      race,
+      eventCount,
+      cursor,
+      following,
+      seek,
+      stepBack,
+      stepForward,
+      jumpToLive,
+      start,
+      step,
+      play,
+      pause,
+      restart,
+    ],
   );
 }
 
