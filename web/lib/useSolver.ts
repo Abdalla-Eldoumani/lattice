@@ -68,6 +68,11 @@ export interface SolverState {
   // before a start, and on every event arrival the buffer grows by one. Always 0 in race mode (the
   // race is play-only and not scrubbable), so the UI hides the scrubber there.
   eventCount: number;
+  // The ordered single-engine event buffer itself (the same array the scrubber replays a prefix of),
+  // exposed read-only so the conflict explainer can reconstruct a conflict's explanation from the
+  // genuine events up to the cursor. Empty in race mode (the buffer is never populated there). It is
+  // the live array reference, kept stable across renders; `eventCount`/`cursor` drive any memoization.
+  events: SolverEvent[];
   // The index up to which the rendered view (grid/minimap/counters/...) is reconstructed: 0 is the
   // seed (before any event), `eventCount` is the live edge. The view above always reflects THIS
   // position, so the whole panel shows one consistent historical moment.
@@ -350,6 +355,7 @@ export function useSolver(): SolverState {
       conn,
       race,
       eventCount,
+      events: eventsRef.current,
       cursor,
       following,
       seek,
