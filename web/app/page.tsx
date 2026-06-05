@@ -238,6 +238,18 @@ function RacePanel({
           {engine === "sat" ? "sat" : "solved"}
         </p>
       )}
+      {/* Each race panel reflects its OWN engine's result. The unsat line mirrors the solved line:
+          conflict-red with a leading ⊥ glyph (the non-color cue, VIZ-08) and role=status so the
+          panel's outcome is announced even though the two engines resolve independently. */}
+      {side.unsat && (
+        <p
+          role="status"
+          className="tabular w-full text-sm text-[color:var(--color-state-conflict)]"
+        >
+          <span aria-hidden="true">⊥ </span>
+          {engine === "sat" ? "unsat" : "unsat — no solution"}
+        </p>
+      )}
     </section>
   );
 }
@@ -410,6 +422,15 @@ function ThinkingPanel({
 
       {solver.solved && (
         <p className="tabular text-sm text-[color:var(--color-state-solved)]">solved</p>
+      )}
+      {/* The UNSAT result line (the dead-end peer of `solved`): conflict-red with a leading ⊥ glyph
+          so the result reads without relying on color alone (VIZ-08), and role=status so a screen
+          reader announces it. The "no solution" last-step text in the aria-live region above carries
+          the same fact in prose; this is the at-a-glance result the frozen trail otherwise hides. */}
+      {solver.unsat && (
+        <p role="status" className="tabular text-sm text-[color:var(--color-state-conflict)]">
+          <span aria-hidden="true">⊥ </span>unsat — no solution
+        </p>
       )}
     </aside>
   );
