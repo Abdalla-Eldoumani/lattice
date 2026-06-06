@@ -15,6 +15,10 @@ export const SOLVER_WS_URL =
 
 export type Mode = "trace" | "fast";
 
+// Which puzzle the server should route the `start` definition to. Mirrors the kind set the Haskell
+// server dispatches on in `app/server/Main.hs`.
+export type PuzzleKind = "sudoku" | "graph" | "queens" | "nonogram";
+
 // ---------------------------------------------------------------------------
 // Server -> client: the reasoning stream (the CP engine emits the first five).
 // ---------------------------------------------------------------------------
@@ -89,7 +93,8 @@ export type SolverEvent =
 export interface StartControl {
   v: typeof PROTOCOL_VERSION;
   t: "start";
-  puzzle: string; // the puzzle grid text the server parses
+  kind: PuzzleKind; // which encoder the server routes the definition to
+  puzzle: string; // the raw puzzle definition the server parses
   mode: Mode;
 }
 

@@ -18,7 +18,7 @@ import Data.Char (intToDigit, isDigit)
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
-import Data.List (intercalate)
+import Data.List (intercalate, transpose)
 import Data.Maybe (isJust, isNothing, mapMaybe)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -31,6 +31,13 @@ import Lattice.CP.Solver (solveTrace)
 import Lattice.Core.Domain (domainOf)
 import Lattice.Core.Types (Assignment, Constraint (..), Domain (..), Model (..))
 import Lattice.Encode.Graph (Graph (..), graphModel, parseGraph)
+import Lattice.Encode.Nonogram (
+  Nonogram (..),
+  decodeNonogram,
+  lineClue,
+  nonogramModel,
+  parseNonogram,
+ )
 import Lattice.Encode.Queens (queensModel)
 import Lattice.Event (Event (..))
 import Lattice.Protocol (Control (..))
@@ -69,6 +76,7 @@ tests =
     , golden
     , graph
     , queens
+    , nonogram
     , ordering
     , sumComparison
     , eventProtocol
@@ -145,7 +153,27 @@ golden =
         "hard-17.txt solves to the recorded solution"
         "test/golden/hard-17.sol"
         (cpSolutionBytes "puzzles/sudoku/hard-17.txt")
+    , goldenVsString
+        "heart.json solves to the recorded picture"
+        "test/golden/heart.sol"
+        nonogramPictureBytes
     ]
+
+{- | Solve the heart nonogram with the CP engine and render the decoded picture (one row per line,
+@#@ for ink, @.@ for blank) for the golden pin.
+-}
+nonogramPictureBytes :: IO BL.ByteString
+nonogramPictureBytes = do
+  raw <- TIO.readFile "puzzles/nonogram/heart.json"
+  pure $ case parseNonogram raw of
+    Left e -> encode (T.pack ("parse error: " <> e))
+    Right n -> case solve (nonogramModel n) of
+      Solved a -> encode (renderPicture (decodeNonogram n a))
+      NoSolution -> encode "no solution"
+ where
+  encode = BL.fromStrict . TE.encodeUtf8
+  renderPicture grid =
+    T.intercalate "\n" [T.pack [if cell == 1 then '#' else '.' | cell <- row] | row <- grid]
 
 {- | Solve a puzzle file with the CP engine and return the decoded solution as bytes for the golden
 comparison.
@@ -252,6 +280,9 @@ satisfies model asn = all holds (modelConstraints model)
   holds (SumEq vs c) =
     let xs = mapMaybe (`IntMap.lookup` asn) vs
      in length xs == length vs && sum xs == c
+  holds (LineClue vs clue) =
+    let xs = mapMaybe (`IntMap.lookup` asn) vs
+     in length xs == length vs && lineClue xs == clue
 
 -- | A generated 4x4 puzzle, carried as its grid text so a failing case prints a readable grid.
 newtype Puzzle = Puzzle String
@@ -314,6 +345,16 @@ graph =
     "graph coloring"
     [ testCase "the Petersen graph 3-colors" petersenColors
     , testProperty "CP and the oracle agree on k-colorability" prop_graphColoring
+    , testCase "parseGraph rejects an edge naming a non-existent vertex" $
+        -- An out-of-range edge (vertex 99 in a 2-vertex graph) would seed an empty domain and
+        -- report a wrong NoSolution; reject it at the parse boundary instead (CR-02).
+        assertLeft
+          ( parseGraph
+              "{\"k\":3,\"vertices\":[{\"x\":0,\"y\":0},{\"x\":1,\"y\":1}],\"edges\":[[0,99]]}"
+          )
+    , testCase "parseGraph rejects k < 1" $
+        assertLeft
+          (parseGraph "{\"k\":0,\"vertices\":[{\"x\":0,\"y\":0}],\"edges\":[]}")
     ]
 
 petersenColors :: IO ()
@@ -350,6 +391,94 @@ queens =
     queenCount 8 @?= 92
  where
   queenCount n = length (Brute.solveAll (queensModel n))
+
+{- | Nonogram (ENCODE-04): the mandatory round-trip (clues -> CP solve -> grid -> re-derive clues =
+the input), a unit check of the run-length extraction, a tractable uniqueness gate on a tiny
+instance the dumb oracle can enumerate, and the sound-propagation property on random small
+satisfiable nonograms (the silent-killer guard for the new 'LineClue' propagator). The heart
+fixture's own uniqueness is verified out of band (it has 100 free cells, so 'Brute.solveAll' over
+the full boolean grid is intractable by design); see the SUMMARY for the independent count.
+-}
+nonogram :: TestTree
+nonogram =
+  testGroup
+    "nonogram"
+    [ testCase "lineClue extracts the run lengths of a 0/1 line" $ do
+        lineClue [1, 1, 0, 1] @?= [2, 1]
+        lineClue [0, 0, 0] @?= []
+        lineClue [1, 1, 1] @?= [3]
+        lineClue [] @?= []
+    , testCase
+        "the heart fixture round-trips (clues -> solve -> grid -> re-derive clues)"
+        nonogramRoundTrip
+    , testCase "a tiny nonogram has a unique solution the oracle confirms" $ do
+        let m = nonogramModel tinyNono
+        length (Brute.solveAll m) @?= 1
+    , testProperty "sound propagation: the LineClue propagator never prunes a real value" $
+        forAll genSatNonogram (soundPropHolds . nonogramModel)
+    , testCase "parseNonogram rejects a clue list shorter than its dimension" $
+        -- A well-typed but malformed payload (rows says 10, rowClues is empty) must be a Left,
+        -- not a Right that crashes the solve thread on a partial index (CR-01).
+        assertLeft (parseNonogram "{\"rows\":10,\"cols\":10,\"rowClues\":[],\"colClues\":[]}")
+    , testCase "parseNonogram rejects a non-positive run length" $
+        -- A degenerate 0-run clue diverges from the oracle (WR-01); reject it at the boundary.
+        assertLeft
+          ( parseNonogram
+              "{\"rows\":1,\"cols\":3,\"rowClues\":[[0]],\"colClues\":[[],[],[]]}"
+          )
+    ]
+
+-- | Assert a parser returned a 'Left' (malformed input was rejected, not silently accepted).
+assertLeft :: (Show a) => Either String a -> IO ()
+assertLeft (Left _) = pure ()
+assertLeft (Right a) = assertFailure ("expected Left for malformed input, got Right " <> show a)
+
+{- | The mandatory ENCODE-04 round-trip: the CP engine solves the heart fixture, and the solved grid
+re-derives exactly the input row and column clues. Two independent checks in one — a wrong solve or a
+wrong encoding both fail it.
+-}
+nonogramRoundTrip :: IO ()
+nonogramRoundTrip = do
+  raw <- TIO.readFile "puzzles/nonogram/heart.json"
+  case parseNonogram raw of
+    Left e -> assertFailure ("nonogram parse failed: " <> e)
+    Right n -> case solve (nonogramModel n) of
+      NoSolution -> assertFailure "the heart fixture is solvable but CP found no solution"
+      Solved a -> do
+        let grid = decodeNonogram n a
+        map lineClue grid @?= nonoRowClues n
+        map lineClue (transpose grid) @?= nonoColClues n
+
+{- | A tiny 3x3 nonogram with a single solution (an X / diagonal-corners shape), small enough that
+the dumb 'Brute.solveAll' over its 9 cells enumerates quickly. Solution:
+@1 0 1 / 0 1 0 / 1 0 1@.
+-}
+tinyNono :: Nonogram
+tinyNono =
+  Nonogram
+    { nonoRows = 3
+    , nonoCols = 3
+    , nonoRowClues = [[1, 1], [1], [1, 1]]
+    , nonoColClues = [[1, 1], [1], [1, 1]]
+    }
+
+{- | Generate an always-satisfiable small nonogram: draw a random small 0/1 grid, derive its row and
+column clues, and build the instance from those clues. The drawn grid is always a solution, so
+'Brute.solveAll' is non-empty and the sound-propagation property never discards a case. Kept tiny
+(2..4 per side) so the dumb oracle enumerates fast.
+-}
+genSatNonogram :: Gen Nonogram
+genSatNonogram = do
+  rows <- choose (2, 4)
+  cols <- choose (2, 4)
+  grid <- vectorOf rows (vectorOf cols (elements [0, 1]))
+  pure
+    Nonogram
+      { nonoRows = rows
+      , nonoCols = cols
+      , nonoRowClues = map lineClue grid
+      , nonoColClues = map lineClue (transpose grid)
+      }
 
 {- | Ordering (ORDER-01/02/03): MRV with the degree tie-break and LCV measurably reduces the
 decisions the search makes on hard-17 versus naive in-order selection. Recorded counts (deterministic
@@ -430,7 +559,10 @@ prop_controlRoundTrip c = Aeson.decode (Aeson.encode c) === Just c
 instance Arbitrary Control where
   arbitrary =
     oneof
-      [ Start . T.pack <$> arbitrary <*> (T.pack <$> arbitrary)
+      [ Start . T.pack
+          <$> elements ["sudoku", "graph", "queens", "nonogram"]
+          <*> (T.pack <$> arbitrary)
+          <*> (T.pack <$> arbitrary)
       , pure Step
       , Play <$> choose (0.1, 16.0)
       , pure Pause
