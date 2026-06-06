@@ -1,99 +1,76 @@
-// The wire protocol between the Haskell engine and this front end. This is the TypeScript side
-// of a contract whose other side is the `Lattice.Event` ADT and its aeson instances in the
-// engine. The two are kept in sync by hand: when you change one, change the other in the same
-// commit. The wire form is JSON with a version field `v` and a tag field `t`.
+// The wire protocol between the Haskell engine and this front end. This is the TypeScript side of a
+// contract whose other side is the `Lattice.Event` / `Lattice.Protocol` ADTs and their aeson
+// instances in the engine. The two are kept in sync by hand: when you change one, change the other
+// in the same commit. The wire form is JSON with a version field `v` and a tag field `t`.
 //
-// Events speak in PUZZLE coordinates (cell indices, vertex ids), never internal solver variable
-// ids. The encoder owns that mapping so the UI never has to translate.
+// Events speak in PUZZLE coordinates (cell indices), never internal solver variable ids — for
+// Sudoku the cell index is the variable index.
 
 export const PROTOCOL_VERSION = 1 as const;
 
-// In dev, the Haskell server runs separately in WSL bound to 127.0.0.1; WSL2 forwards localhost
-// to the host browser. Override with NEXT_PUBLIC_SOLVER_WS if you bind elsewhere.
+// The Haskell server runs in WSL bound to 127.0.0.1:8080; WSL2 forwards localhost to the host
+// browser. The WebSocket upgrade is path-agnostic on the server. Override with NEXT_PUBLIC_SOLVER_WS.
 export const SOLVER_WS_URL =
   process.env.NEXT_PUBLIC_SOLVER_WS ?? "ws://127.0.0.1:8080/ws";
 
-// ---------------------------------------------------------------------------
-// Server -> client: the reasoning stream.
-// ---------------------------------------------------------------------------
-
-export type Engine = "cp" | "sat";
 export type Mode = "trace" | "fast";
 
-export interface Stats {
-  decisions: number;
-  propagations: number;
-  backtracks: number;
-  conflicts: number;
-  learned: number; // SAT only; 0 for CP
-}
+// ---------------------------------------------------------------------------
+// Server -> client: the reasoning stream (the CP engine emits the first five).
+// ---------------------------------------------------------------------------
 
-// A decision: the search picked a value for a variable because propagation stalled.
+// A decision: the search assigned `value` to `cell` at the given decision level.
 export interface DecisionEvent {
   v: typeof PROTOCOL_VERSION;
   t: "decision";
-  cell: number; // puzzle coordinate (e.g. flat Sudoku index 0..80)
+  cell: number;
   value: number;
-  level: number; // decision level
+  level: number;
 }
 
-// A propagation step: value `removed` was eliminated from `cell` because of `reason`.
+// A propagation step: `removed` was eliminated from `cell`'s domain.
 export interface PropagateEvent {
   v: typeof PROTOCOL_VERSION;
   t: "propagate";
   cell: number;
   removed: number;
-  reason: string; // human-readable constraint label, e.g. "row 3 all-different"
 }
 
-// A conflict: a domain emptied (CP) or a clause is falsified (SAT).
+// A conflict: a domain emptied at `cell`.
 export interface ConflictEvent {
   v: typeof PROTOCOL_VERSION;
   t: "conflict";
-  cell: number; // where the contradiction surfaced
+  cell: number;
 }
 
-// A backtrack/backjump: the search returned to `toLevel`, undoing the listed cells.
+// A backtrack: the search undid the decision at `level`.
 export interface BacktrackEvent {
   v: typeof PROTOCOL_VERSION;
   t: "backtrack";
-  toLevel: number;
-  undone: number[]; // cells whose assignments were undone
+  level: number;
 }
 
-// SAT only: a clause learned from conflict analysis (1UIP). Literals are signed puzzle-relative
-// codes; positive and negative encode polarity.
-export interface LearnedEvent {
-  v: typeof PROTOCOL_VERSION;
-  t: "learned";
-  literals: number[];
-}
-
-// SAT only: a restart fired (Luby schedule).
-export interface RestartEvent {
-  v: typeof PROTOCOL_VERSION;
-  t: "restart";
-}
-
-// A full solution assignment, puzzle-relative.
+// A full solution: cell/value pairs, puzzle-relative.
 export interface SolutionEvent {
   v: typeof PROTOCOL_VERSION;
   t: "solution";
-  assignment: number[]; // value per cell, in puzzle order
+  assignment: [number, number][];
 }
 
-// A sound proof that no solution exists, for instances where that is in scope.
+// A sound proof that no solution exists.
 export interface UnsatEvent {
   v: typeof PROTOCOL_VERSION;
   t: "unsat";
 }
 
-// Running counters, emitted periodically so the thinking panel stays live without one message
-// per counter tick.
+// Running counters (the UI also derives these by tallying the stream).
 export interface StatsEvent {
   v: typeof PROTOCOL_VERSION;
   t: "stats";
-  stats: Stats;
+  decisions: number;
+  propagations: number;
+  backtracks: number;
+  conflicts: number;
 }
 
 export type SolverEvent =
@@ -101,8 +78,6 @@ export type SolverEvent =
   | PropagateEvent
   | ConflictEvent
   | BacktrackEvent
-  | LearnedEvent
-  | RestartEvent
   | SolutionEvent
   | UnsatEvent
   | StatsEvent;
@@ -114,14 +89,13 @@ export type SolverEvent =
 export interface StartControl {
   v: typeof PROTOCOL_VERSION;
   t: "start";
-  puzzle: string; // puzzle id or inline spec the server can resolve
-  engine: Engine;
+  puzzle: string; // the puzzle grid text the server parses
   mode: Mode;
 }
 
 export interface StepControl {
   v: typeof PROTOCOL_VERSION;
-  t: "step"; // advance exactly one event (single-step)
+  t: "step";
 }
 
 export interface PlayControl {
@@ -147,8 +121,7 @@ export type SolverControl =
   | PauseControl
   | RestartControl;
 
-// Narrowing helpers. Validate the version on receipt so a protocol bump fails loudly rather
-// than rendering garbage.
+// Validate the version on receipt so a protocol bump fails loudly rather than rendering garbage.
 export function parseEvent(raw: string): SolverEvent | null {
   try {
     const msg = JSON.parse(raw) as SolverEvent;
