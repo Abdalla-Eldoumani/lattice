@@ -1,0 +1,106 @@
+cabal-version:      3.4
+name:               lattice
+version:            0.1.0.0
+synopsis:           A constraint and SAT solver that streams its reasoning to a live puzzle visualizer.
+description:        Finite-domain constraint propagation (and, in later milestones, a CDCL SAT engine)
+                    with an instrumented event stream a web front end animates step by step.
+license:            MIT
+author:             Abdalla Eldoumani
+maintainer:         Abdalla Eldoumani
+category:           Algorithms
+build-type:         Simple
+tested-with:        GHC == 9.12.2
+extra-source-files: README.md
+
+-- Shared compiler settings. Warnings are errors in CI; keep the tree clean.
+common warnings
+    ghc-options:      -Wall
+                      -Wcompat
+                      -Widentities
+                      -Wincomplete-record-updates
+                      -Wincomplete-uni-patterns
+                      -Wmissing-export-lists
+                      -Wpartial-fields
+                      -Wredundant-constraints
+    default-language: GHC2021
+
+-- The engine library. The module map below is the TARGET shape; modules are added
+-- one per task as milestones land, and `exposed-modules` is updated in the same commit
+-- that creates the module. Keep `exposed-modules` in sync with the files that exist so
+-- `cabal build` always passes.
+--
+-- Target module map (create as you go):
+--   Lattice.Core.Types        variables, values, domains, the trail
+--   Lattice.Core.Domain       domain operations (mutable and pure variants)
+--   Lattice.CP.Propagator     all-different, not-equal, sum, comparison propagators
+--   Lattice.CP.Queue          the propagation queue / fixpoint loop
+--   Lattice.CP.Search         backtracking search, MRV / degree / LCV ordering
+--   Lattice.CP.Solver         the CP entry point (fast and trace modes)
+--   Lattice.Encode.Sudoku     Sudoku model + parser
+--   Lattice.Encode.Graph      graph-coloring model + parser
+--   Lattice.Encode.Queens     N-queens model
+--   Lattice.Event             the event ADT and the Emitter abstraction
+--   Lattice.Protocol          aeson instances for the JSON wire protocol  (milestone 3)
+--   Lattice.Brute             exhaustive reference solver for differential tests
+--   Lattice.SAT.*             CDCL engine: ClauseDB, Watched, Trail, Analyze, VSIDS (milestone 5)
+library
+    import:           warnings
+    hs-source-dirs:   src
+    exposed-modules:  Lattice
+    build-depends:    base       >=4.21 && <4.22
+                    , containers >=0.7  && <0.9
+                    , vector     >=0.13 && <0.14
+                    , primitive  >=0.9  && <0.10
+                    , text       >=2.1  && <2.2
+
+-- Solve a puzzle in the terminal. This is the milestone-1 deliverable: it reads a puzzle
+-- file and prints the solution (or a sound "no solution") with no visualizer involved.
+executable lattice-cli
+    import:           warnings
+    hs-source-dirs:   app/cli
+    main-is:          Main.hs
+    ghc-options:      -O2
+    build-depends:    base
+                    , lattice
+                    , text
+
+-- The streaming server is a milestone-3 component. Uncomment this stanza, and add its
+-- source under app/server, when you reach the visualizer milestone. Its dependencies are
+-- intentionally NOT pulled into the milestone-1 build so the first `cabal build all`
+-- resolves a small, fast set.
+--
+-- executable lattice-server
+--     import:           warnings
+--     hs-source-dirs:   app/server
+--     main-is:          Main.hs
+--     ghc-options:      -O2 -threaded -rtsopts "-with-rtsopts=-N"
+--     build-depends:    base
+--                     , lattice
+--                     , scotty         >=0.22 && <0.23
+--                     , warp           >=3.4  && <3.5
+--                     , wai            >=3.2  && <3.3
+--                     , wai-websockets >=3.0  && <3.1
+--                     , websockets     >=0.13 && <0.14
+--                     , aeson          >=2.2  && <2.3
+--                     , stm            >=2.5  && <2.6
+--                     , async          >=2.2  && <2.3
+--                     , text
+--                     , bytestring
+
+-- The test suite carries the correctness load. It runs on Linux in CI. The brute-force
+-- differential check (CP vs exhaustive search on small instances) is the main defense
+-- against the silent-wrong-on-hard-instances bug and must land in milestone 1.
+test-suite lattice-test
+    import:           warnings
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Main.hs
+    build-depends:    base
+                    , lattice
+                    , containers
+                    , vector
+                    , tasty            >=1.5 && <1.6
+                    , tasty-hunit      >=0.10 && <0.11
+                    , tasty-quickcheck >=0.11 && <0.12
+                    , tasty-golden     >=2.3 && <2.4
+                    , QuickCheck       >=2.15 && <2.16

@@ -1,0 +1,17 @@
+packages: .
+
+-- Pinned compiler. ghcup must provide this exact shim:
+--   ghcup install ghc 9.12.2 && ghcup set ghc 9.12.2
+-- GHC 9.12.2 has a prebuilt HLS binary and full support across the dependency set.
+-- If this compiler is not present the build fails loudly; install it rather than
+-- editing this line to whatever happens to be on PATH.
+with-compiler: ghc-9.12.2
+
+-- Reproducibility. cabal resolves the package set available on Hackage as of this
+-- snapshot. On first build run `cabal update` then `cabal freeze` to lock the entire
+-- dependency closure into cabal.project.freeze, and commit that file. Do not move
+-- index-state forward without regenerating the freeze file in the same change.
+index-state: 2026-06-01T00:00:00Z
+
+tests: True
+benchmarks: False
