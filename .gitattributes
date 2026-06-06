@@ -1,0 +1,31 @@
+# Enforce LF everywhere. The builder works across the WSL/Windows boundary and has hit
+# CRLF pain before; this normalizes line endings on checkin regardless of host. GHC,
+# cabal, and the shell tooling all expect LF.
+* text=auto eol=lf
+
+# Be explicit for the file types this project actually contains, so there is no ambiguity
+# about a stray editor setting.
+*.hs       text eol=lf
+*.lhs      text eol=lf
+*.cabal    text eol=lf
+*.project  text eol=lf
+*.yaml     text eol=lf
+*.yml      text eol=lf
+*.json     text eol=lf
+*.md       text eol=lf
+*.ts       text eol=lf
+*.tsx      text eol=lf
+*.css      text eol=lf
+*.mjs      text eol=lf
+*.txt      text eol=lf
+*.sh       text eol=lf
+
+# Binary assets must never be line-ending munged.
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.webp     binary
+*.woff     binary
+*.woff2    binary
+*.ico      binary
