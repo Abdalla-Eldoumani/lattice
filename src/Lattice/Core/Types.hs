@@ -47,6 +47,9 @@ type Assignment = IntMap Value
 [a, b]@) so graph-coloring reuses the binary case directly. Phase 2 adds three more:
 'AllDiffOffset' makes the values @v + offset@ pairwise distinct (the three-line N-queens encoding —
 columns and both diagonals), and 'SumEq' / 'LessEq' are the sum and comparison constraints.
+Phase 4 adds 'LineClue' for nonograms: a line of @{0,1}@ cells (in order) whose maximal runs of 1s
+must match the run-length clue — contiguity no existing constraint expresses ('SumEq' fixes a
+line's total ink but not its run pattern).
 -}
 data Constraint
   = AllDifferent [Var]
@@ -54,6 +57,7 @@ data Constraint
   | AllDiffOffset [(Var, Int)]
   | SumEq [Var] Int
   | LessEq Var Var
+  | LineClue [Var] [Int]
   deriving (Eq, Show)
 
 -- | The outcome of a solve: a satisfying assignment, or a sound report that none exists.

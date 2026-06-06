@@ -94,6 +94,44 @@ propagateConstraint (LessEq a b) ds
           ds2 = IntSet.foldr (`removeValue` b) ds1 badB
           shrunk = [a | not (IntSet.null badA)] ++ [b | not (IntSet.null badB)]
        in finalize [a, b] ds2 shrunk
+propagateConstraint (LineClue vars clue) ds =
+  -- Placement-enumeration value elimination: enumerate every 0/1 layout of the line that has
+  -- exactly the clued runs in order, keep those consistent with the already-decided cells, then
+  -- force a cell to 1 (remove 0) when every surviving layout inks it, and to 0 (remove 1) when
+  -- none does. Sound but weak (it is value elimination, not the strongest line consistency).
+  -- >>> LINE-AC UPGRADE SLOT <<<
+  -- (A DFA/automaton propagator over the run-length regular language would replace enumeration
+  -- here with layered-graph reasoning; the enumeration below is the slot it supersedes. The
+  -- layout count is C(free + runs, runs), cheap for lines <= ~15 cells, which is why fixtures
+  -- keep lines narrow — a wide line with many runs is the one cost cliff.)
+  case filter (agrees domsInLine) (placements (length vars) clue) of
+    [] -> Conflict (firstVar vars)
+    surviving ->
+      let forced = [(i, decide i surviving) | i <- [0 .. length vars - 1]]
+          (ds', shrunk) = foldl' force (ds, []) forced
+       in finalize vars ds' shrunk
+ where
+  domsInLine = [domainOf v ds | v <- vars]
+  firstVar (v : _) = v
+  firstVar [] = 0
+  -- A layout agrees with a cell whose domain is a singleton {0} or {1}; an undecided {0,1} cell
+  -- accepts either bit.
+  agrees doms layout = and (zipWith ok doms layout)
+   where
+    ok dom bit = case singletonValue dom of
+      Just fixed -> fixed == bit
+      Nothing -> True
+  -- Just 1 if every surviving layout inks index i, Just 0 if none does, Nothing if they disagree.
+  decide i surviving =
+    let bits = [layout !! i | layout <- surviving]
+     in if all (== 1) bits
+          then Just 1
+          else if all (== 0) bits then Just 0 else Nothing
+  force acc (_, Nothing) = acc
+  force (curDs, sh) (i, Just bit) =
+    let v = vars !! i
+        next = removeValue (1 - bit) v curDs
+     in if domainOf v next /= domainOf v curDs then (next, v : sh) else (curDs, sh)
 
 {- | Classify the pass: any emptied domain is a 'Conflict'; otherwise report real shrinks (with
 duplicates removed) as 'Changed', or 'Unchanged' when nothing moved.
@@ -104,6 +142,28 @@ finalize vars ds' shrunk = case filter (\y -> isEmpty (domainOf y ds')) vars of
   []
     | null shrunk -> Unchanged
     | otherwise -> Changed (IntSet.toList (IntSet.fromList shrunk)) ds'
+
+{- | Every 0/1 layout of a line of the given length whose maximal runs of 1s are exactly the clue,
+in order. Built by recursion on the run list: each run needs a gap of at least one blank after it
+unless it is the last, and leading/trailing blanks are free. The count is @C(free + runs, runs)@,
+so a line of <= ~15 cells with a few runs is cheap to enumerate (see the LINE-AC upgrade note).
+-}
+placements :: Int -> [Int] -> [[Value]]
+placements len [] = [replicate len 0]
+placements len (r : rs)
+  | r > len = []
+  | otherwise =
+      -- Leading blanks (0..), then the run of @r@ ones, then a separating blank if more runs
+      -- follow, then recurse on the remaining length.
+      [ replicate lead 0 ++ replicate r 1 ++ sep ++ rest
+      | lead <- [0 .. len - r - minTail]
+      , rest <- placements (len - lead - r - length sep) rs
+      ]
+ where
+  -- A separating blank after this run, present only when more runs follow.
+  sep = [0 | not (null rs)]
+  -- The minimum cells the remaining runs (plus their separators) still need after this run.
+  minTail = if null rs then 0 else sum rs + length rs
 
 -- | The least value in a non-empty domain (callers guard emptiness first).
 domMin :: Domain -> Value
@@ -122,3 +182,4 @@ constraintVars (NotEqual a b) = [a, b]
 constraintVars (AllDiffOffset pairs) = map fst pairs
 constraintVars (SumEq vs _) = vs
 constraintVars (LessEq a b) = [a, b]
+constraintVars (LineClue vs _) = vs

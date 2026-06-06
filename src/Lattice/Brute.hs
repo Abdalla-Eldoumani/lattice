@@ -13,7 +13,7 @@ module Lattice.Brute (
 
 import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
-import Data.List (minimumBy)
+import Data.List (group, minimumBy)
 import Data.Maybe (mapMaybe)
 import Data.Ord (comparing)
 import Lattice.Core.Types (Assignment, Constraint (..), Domain (..), Model (..), Value, Var)
@@ -70,7 +70,18 @@ solveAll model = go (IntMap.keys doms) IntMap.empty
   satisfied asn (SumEq vars c) =
     let assigned = mapMaybe (`IntMap.lookup` asn) vars
      in length assigned < length vars || sum assigned == c
+  satisfied asn (LineClue vars clue) =
+    case traverse (`IntMap.lookup` asn) vars of
+      -- Partial-assignment convention (like SumEq): a not-fully-assigned line passes.
+      Nothing -> True
+      Just bits -> runs bits == clue
 
 -- | Are all of these (already-assigned) values pairwise distinct?
 distinct :: [Value] -> Bool
 distinct xs = IntSet.size (IntSet.fromList xs) == length xs
+
+{- | The run lengths of the maximal blocks of 1s in a 0/1 line, in order. Derived directly from the
+assignment, independent of the propagator, so the differential check stays meaningful.
+-}
+runs :: [Value] -> [Int]
+runs line = [length g | g@(b : _) <- group line, b == 1]
