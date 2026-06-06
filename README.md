@@ -79,6 +79,18 @@ It is not trying to beat MiniSat or Glucose on speed or on industrial instances.
 - `puzzles/` — verified sample instances with known solutions (Sudoku, a graph, a nonogram, and CNF fixtures).
 - `web/` — the Next.js visualizer.
 
+## Documentation
+
+In-depth docs live in [`docs/`](docs/README.md):
+
+- [Architecture](docs/ARCHITECTURE.md) — the system, the data flow, and the two-mode engine design.
+- [CP engine](docs/CP-ENGINE.md) and [SAT engine](docs/SAT-ENGINE.md) — how each solver works inside.
+- [Protocol](docs/PROTOCOL.md) — the event and control wire format the visualizer animates.
+- [Visualizer](docs/VISUALIZER.md) and [Design](docs/DESIGN.md) — the web app internals and the design tokens.
+- [Testing](docs/TESTING.md) — the correctness contract and the differential tests.
+- [Development](docs/DEVELOPMENT.md) — setup, build, run, and contributing.
+- [Deployment](docs/DEPLOYMENT.md) — hosting the visualizer and running the engine.
+
 ## License
 
 MIT.
