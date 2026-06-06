@@ -75,6 +75,34 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The animation vocabulary. Candidate fade is a CSS opacity transition on each candidate in the
+   cell; the decision pulse and conflict flash are keyframes keyed to the motion-duration tokens so
+   the whole visualizer shares one tunable language. */
+@keyframes decision-pulse {
+  from {
+    background: color-mix(in oklab, var(--color-accent) 35%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+.cell-decision {
+  animation: decision-pulse var(--duration-decision-pulse) var(--ease-standard);
+}
+
+@keyframes conflict-flash {
+  0%,
+  100% {
+    background: transparent;
+  }
+  50% {
+    background: color-mix(in oklab, var(--color-state-conflict) 45%, transparent);
+  }
+}
+.cell-conflict {
+  animation: conflict-flash var(--duration-conflict-flash) var(--ease-standard);
+}
+
 /* Respect users who do not want the motion. The solve is still legible stepwise without it. */
 @media (prefers-reduced-motion: reduce) {
   *,
