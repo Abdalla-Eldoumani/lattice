@@ -1,0 +1,6 @@
+c sat-demo: a small satisfiable CNF over 3 variables.
+c A satisfying assignment is x1=true, x2=true, x3=false.
+p cnf 3 3
+1 -2 0
+2 3 0
+-1 -3 0
