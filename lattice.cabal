@@ -5,6 +5,7 @@ synopsis:           A constraint and SAT solver that streams its reasoning to a 
 description:        Finite-domain constraint propagation (and, in later milestones, a CDCL SAT engine)
                     with an instrumented event stream a web front end animates step by step.
 license:            MIT
+license-file:       LICENSE
 author:             Abdalla Eldoumani
 maintainer:         Abdalla Eldoumani
 category:           Algorithms
