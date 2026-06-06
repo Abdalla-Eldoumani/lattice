@@ -1,0 +1,23 @@
+{
+  "name": "petersen",
+  "kind": "graph-coloring",
+  "k": 3,
+  "note": "Petersen graph. Chromatic number 3. Layout is fixed (outer pentagon plus inner pentagram) so the coloring view never re-lays-out and never jitters. x,y are in a 400x400 viewport.",
+  "vertices": [
+    { "id": 0, "x": 200.0, "y": 50.0 },
+    { "id": 1, "x": 342.7, "y": 153.6 },
+    { "id": 2, "x": 288.2, "y": 321.4 },
+    { "id": 3, "x": 111.8, "y": 321.4 },
+    { "id": 4, "x": 57.3, "y": 153.6 },
+    { "id": 5, "x": 200.0, "y": 135.0 },
+    { "id": 6, "x": 261.8, "y": 179.9 },
+    { "id": 7, "x": 238.2, "y": 252.6 },
+    { "id": 8, "x": 161.8, "y": 252.6 },
+    { "id": 9, "x": 138.2, "y": 179.9 }
+  ],
+  "edges": [
+    [0, 1], [1, 2], [2, 3], [3, 4], [4, 0],
+    [0, 5], [1, 6], [2, 7], [3, 8], [4, 9],
+    [5, 7], [7, 9], [9, 6], [6, 8], [8, 5]
+  ]
+}
