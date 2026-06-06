@@ -35,9 +35,22 @@ instance FromJSON Graph where
     edges <- o .: "edges"
     pure Graph {graphK = k, graphVertexCount = length (vs :: [Value]), graphEdges = edges}
 
--- | Parse a graph-coloring instance from its JSON text.
+{- | Parse a graph-coloring instance from its JSON text. Total: structural decode plus a bounds
+check on the untrusted edge list and color count, so a malformed instance is a 'Left' rather than a
+silently wrong answer. An edge naming a vertex id outside @0..vertexCount-1@ would otherwise seed an
+all-empty domain for that id and report the whole instance unsatisfiable; @k < 1@ gives every vertex
+an empty domain (trivially unsat). Both are rejected here so the server's untrusted-input boundary
+gets a clean 'Left' instead of a wrong 'NoSolution'.
+-}
 parseGraph :: Text -> Either String Graph
-parseGraph = eitherDecodeStrict . encodeUtf8
+parseGraph t = eitherDecodeStrict (encodeUtf8 t) >>= validate
+ where
+  validate g
+    | graphK g < 1 = Left "k must be >= 1"
+    | any (outOfRange (graphVertexCount g)) (graphEdges g) =
+        Left "edge references a vertex id outside 0..vertexCount-1"
+    | otherwise = Right g
+  outOfRange n (u, v) = u < 0 || v < 0 || u >= n || v >= n
 
 -- | Build the CSP: each vertex takes a color in @{1..k}@; adjacent vertices differ.
 graphModel :: Graph -> Model
