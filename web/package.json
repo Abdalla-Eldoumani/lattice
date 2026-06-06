@@ -1,0 +1,28 @@
+{
+  "name": "lattice-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "comment": "Exact-pinned. No carets, no tildes. The downstream agent installs exactly what was researched and verified against the npm registry on 2026-06-03. Bump deliberately, never incidentally; if a version fails to resolve, stop and report. This app is a milestone-3 component: do not run npm install here until the CP core and CLI are green.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "next": "16.2.7",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.16",
+    "@types/react-dom": "19.2.3",
+    "tailwindcss": "4.3.0",
+    "@tailwindcss/postcss": "4.3.0",
+    "eslint": "10.4.1",
+    "eslint-config-next": "16.2.7"
+  }
+}
