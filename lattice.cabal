@@ -77,28 +77,24 @@ executable lattice-cli
                     , lattice
                     , text
 
--- The streaming server is a milestone-3 component. Uncomment this stanza, and add its
--- source under app/server, when you reach the visualizer milestone. Its dependencies are
--- intentionally NOT pulled into the milestone-1 build so the first `cabal build all`
--- resolves a small, fast set.
---
--- executable lattice-server
---     import:           warnings
---     hs-source-dirs:   app/server
---     main-is:          Main.hs
---     ghc-options:      -O2 -threaded -rtsopts "-with-rtsopts=-N"
---     build-depends:    base
---                     , lattice
---                     , scotty         >=0.22 && <0.23
---                     , warp           >=3.4  && <3.5
---                     , wai            >=3.2  && <3.3
---                     , wai-websockets >=3.0  && <3.1
---                     , websockets     >=0.13 && <0.14
---                     , aeson          >=2.2  && <2.3
---                     , stm            >=2.5  && <2.6
---                     , async          >=2.2  && <2.3
---                     , text
---                     , bytestring
+-- The streaming visualizer server (milestone 3): Scotty + WebSockets on 127.0.0.1:8080. It streams
+-- the trace event protocol to the browser front end under web/.
+executable lattice-server
+    import:           warnings
+    hs-source-dirs:   app/server
+    main-is:          Main.hs
+    ghc-options:      -O2 -threaded -rtsopts "-with-rtsopts=-N"
+    build-depends:    base
+                    , lattice
+                    , scotty         >=0.22 && <0.23
+                    , warp           >=3.4  && <3.5
+                    , wai            >=3.2  && <3.3
+                    , wai-websockets >=3.0  && <3.1
+                    , websockets     >=0.13 && <0.14
+                    , aeson          >=2.2  && <2.3
+                    , stm            >=2.5  && <2.6
+                    , text
+                    , bytestring
 
 -- The test suite carries the correctness load. It runs on Linux in CI. The brute-force
 -- differential check (CP vs exhaustive search on small instances) is the main defense
