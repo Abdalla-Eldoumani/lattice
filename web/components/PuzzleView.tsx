@@ -10,6 +10,7 @@ import { type PuzzleKind } from "../lib/protocol";
 import { GraphView } from "./GraphView";
 import { QueensBoard } from "./QueensBoard";
 import { NonogramBoard } from "./NonogramBoard";
+import { TrailView } from "./TrailView";
 
 export function PuzzleView({
   kind,
@@ -17,12 +18,15 @@ export function PuzzleView({
   n,
   box,
   definition,
+  learnedClause,
 }: {
   kind: PuzzleKind;
   grid: Cell[];
   n: number;
   box: number;
   definition: string;
+  // The SAT learned clause, for the dimacs TrailView's clause chip; absent for the CP kinds.
+  learnedClause?: number[] | null;
 }) {
   switch (kind) {
     case "sudoku":
@@ -33,6 +37,8 @@ export function PuzzleView({
       return <QueensBoard grid={grid} n={n} />;
     case "nonogram":
       return <NonogramBoard definition={definition} grid={grid} />;
+    case "dimacs":
+      return <TrailView grid={grid} learnedClause={learnedClause} />;
   }
 }
 
