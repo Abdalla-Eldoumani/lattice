@@ -1,0 +1,5 @@
+c unsat-demo: a small unsatisfiable CNF over 1 variable.
+c The unit clauses (x1) and (not x1) contradict, so no assignment satisfies both.
+p cnf 1 2
+1 0
+-1 0
