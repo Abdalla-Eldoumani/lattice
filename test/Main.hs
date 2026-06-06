@@ -376,7 +376,30 @@ graph =
     , testCase "parseGraph rejects k < 1" $
         assertLeft
           (parseGraph "{\"k\":0,\"vertices\":[{\"x\":0,\"y\":0}],\"edges\":[]}")
+    , testCase "parseGraph rejects a huge k (DoS ceiling)" $
+        -- A ~40-byte definition with k = 50_000_000 would otherwise build a 50M-element domain per
+        -- vertex (and C(k,2) at-most-one clauses in the SAT dual encoder), exhausting memory on the
+        -- forked solve thread. The ceiling refuses it at the parse boundary.
+        assertLeft (parseGraph "{\"k\":50000000,\"vertices\":[{\"x\":0,\"y\":0}],\"edges\":[]}")
+    , testCase "parseGraph rejects a vertex count above the ceiling (DoS)" $
+        assertLeft (parseGraph (manyVertexGraph 65))
+    , testCase "parseGraph accepts the Petersen fixture (within the ceilings)" $ do
+        raw <- TIO.readFile "puzzles/graph/petersen.json"
+        case parseGraph raw of
+          Left e -> assertFailure ("Petersen should parse within the DoS ceilings: " <> e)
+          Right _ -> pure ()
     ]
+
+{- | A graph-coloring JSON with @n@ vertices (and k = 3, no edges), to exercise the vertex-count
+ceiling. Each vertex is the minimal @{x,y}@ object the parser reads past.
+-}
+manyVertexGraph :: Int -> T.Text
+manyVertexGraph n =
+  T.pack
+    ( "{\"k\":3,\"vertices\":["
+        <> intercalate "," (replicate n "{\"x\":0,\"y\":0}")
+        <> "],\"edges\":[]}"
+    )
 
 petersenColors :: IO ()
 petersenColors = do

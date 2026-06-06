@@ -41,16 +41,32 @@ silently wrong answer. An edge naming a vertex id outside @0..vertexCount-1@ wou
 all-empty domain for that id and report the whole instance unsatisfiable; @k < 1@ gives every vertex
 an empty domain (trivially unsat). Both are rejected here so the server's untrusted-input boundary
 gets a clean 'Left' instead of a wrong 'NoSolution'.
+
+@k@ and the vertex count are also bounded by a DoS ceiling, the same rationale as @dimacsCeiling@ in
+"Lattice.SAT.Dimacs": 'graphModel' builds an @{1..k}@ domain per vertex and the SAT dual encoder
+("Lattice.SAT.Encode") builds @C(k,2)@ at-most-one clauses per vertex, so an unbounded @k@ or vertex
+count from one tiny untrusted definition (e.g. @{"k":50000000,...}@) exhausts memory on the forked
+solve thread. The bundled fixtures are @k <= 4@, ~10 vertices, so @kCeiling = 16@ / @vertexCeiling =
+64@ are far above any real instance while keeping the worst-case graph -> CNF (@C(16,2)*64@ plus
+@edges*16@) to tens of thousands of clauses — fast and bounded.
 -}
 parseGraph :: Text -> Either String Graph
 parseGraph t = eitherDecodeStrict (encodeUtf8 t) >>= validate
  where
   validate g
     | graphK g < 1 = Left "k must be >= 1"
+    | graphK g > kCeiling = Left ("k exceeds the sane ceiling of " <> show kCeiling)
+    | graphVertexCount g > vertexCeiling =
+        Left ("vertex count exceeds the sane ceiling of " <> show vertexCeiling)
     | any (outOfRange (graphVertexCount g)) (graphEdges g) =
         Left "edge references a vertex id outside 0..vertexCount-1"
     | otherwise = Right g
   outOfRange n (u, v) = u < 0 || v < 0 || u >= n || v >= n
+
+-- | DoS ceilings on @k@ and the vertex count (see 'parseGraph'): far above the fixtures, small CNF.
+kCeiling, vertexCeiling :: Int
+kCeiling = 16
+vertexCeiling = 64
 
 -- | Build the CSP: each vertex takes a color in @{1..k}@; adjacent vertices differ.
 graphModel :: Graph -> Model
