@@ -62,6 +62,7 @@ library
                       Lattice.Brute
                       Lattice.SAT.Types
                       Lattice.SAT.ClauseDB
+                      Lattice.SAT.Trail
     build-depends:    base       >=4.21 && <4.22
                     , containers >=0.7  && <0.9
                     , vector     >=0.13 && <0.14
