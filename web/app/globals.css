@@ -32,6 +32,18 @@
   --color-state-solved: #5e9e72; /* a cell/clause that is settled and correct */
   --color-state-propagate: #7c766b; /* a value being removed by propagation (fades to this) */
 
+  /* Graph categorical fill ramp. The graph view paints each color class a distinct fill from the
+     palette spirit: warm neutrals and the ochre, no neon, no purple/teal/cyan. These are NOT state
+     colors (a class-red vertex is not "in conflict"), so they deliberately avoid state-conflict and
+     state-solved. Color alone never identifies a class — every colored vertex also carries its
+     numeral id, the mandatory non-color signal (VIZ-08). Each fill holds >= 3:1 vs bg; the numeral
+     reads at >= 4.5:1 on its fill via a per-fill label color (dark label on the light fills, ink on
+     the dark ones). Petersen needs 3 classes, the hard graph needs 4. */
+  --color-graph-1: #e08d3c; /* class 1: accent ochre (fill 7.39:1 vs bg, bg-label 7.39:1) */
+  --color-graph-2: #b9b2a4; /* class 2: warm grey / ink-dim (9.16:1 vs bg, bg-label 9.16:1) */
+  --color-graph-3: #8a5a24; /* class 3: darker ochre, distinct (3.28:1 vs bg, ink-label 5.09:1) */
+  --color-graph-4: #6e6456; /* class 4: warm taupe, distinct from -2 (3.33:1 vs bg, ink-label 5.01:1) */
+
   /* Type families (bound to next/font variables in layout.tsx) */
   --font-display: var(--font-fraunces), Georgia, serif;
   --font-sans: var(--font-inter), system-ui, sans-serif;
