@@ -11,10 +11,21 @@ module Lattice (
   toModel,
   decode,
   ParseError (..),
+  Graph (..),
+  parseGraph,
+  graphModel,
+  queensModel,
+  Nonogram (..),
+  parseNonogram,
+  nonogramModel,
+  decodeNonogram,
 ) where
 
 import Lattice.CP.Solver (solve)
 import Lattice.Core.Types (Result (..))
+import Lattice.Encode.Graph (Graph (..), graphModel, parseGraph)
+import Lattice.Encode.Nonogram (Nonogram (..), decodeNonogram, nonogramModel, parseNonogram)
+import Lattice.Encode.Queens (queensModel)
 import Lattice.Encode.Sudoku (ParseError (..), decode, parseGrid, toModel)
 
 -- | Library version, surfaced by the CLI and (later) the server banner.
