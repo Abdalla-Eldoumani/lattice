@@ -16,42 +16,70 @@ export const SOLVER_WS_URL =
 export type Mode = "trace" | "fast";
 
 // Which puzzle the server should route the `start` definition to. Mirrors the kind set the Haskell
-// server dispatches on in `app/server/Main.hs`.
-export type PuzzleKind = "sudoku" | "graph" | "queens" | "nonogram";
+// server dispatches on in `app/server/Main.hs`. `dimacs` carries raw CNF text for the SAT engine.
+export type PuzzleKind = "sudoku" | "graph" | "queens" | "nonogram" | "dimacs";
+
+// Which solver runs a `start`. `race` runs CP and SAT side by side on a dual-encodable instance,
+// each event tagged with the engine that produced it. Defaults to `cp` on the server.
+export type Engine = "cp" | "sat" | "race";
 
 // ---------------------------------------------------------------------------
 // Server -> client: the reasoning stream (the CP engine emits the first five).
 // ---------------------------------------------------------------------------
+//
+// Every event optionally carries an `engine` tag (`cp` | `sat`); the server stamps it so a race's
+// interleaved CP and SAT streams can be split into two panels. It is absent on a single-engine
+// stream (the field is additive and the protocol stays v1).
 
-// A decision: the search assigned `value` to `cell` at the given decision level.
+// A decision: the search assigned `value` to `cell` at the given decision level. For SAT, `cell` is
+// the variable id, `value` the polarity (0/1), `level` the decision level.
 export interface DecisionEvent {
   v: typeof PROTOCOL_VERSION;
   t: "decision";
   cell: number;
   value: number;
   level: number;
+  engine?: Engine;
 }
 
-// A propagation step: `removed` was eliminated from `cell`'s domain.
+// A propagation step: `removed` was eliminated from `cell`'s domain. For SAT, a forced literal.
 export interface PropagateEvent {
   v: typeof PROTOCOL_VERSION;
   t: "propagate";
   cell: number;
   removed: number;
+  engine?: Engine;
 }
 
-// A conflict: a domain emptied at `cell`.
+// A conflict: a domain emptied at `cell` (for SAT, a falsified clause's variable).
 export interface ConflictEvent {
   v: typeof PROTOCOL_VERSION;
   t: "conflict";
   cell: number;
+  engine?: Engine;
 }
 
-// A backtrack: the search undid the decision at `level`.
+// A backtrack: the search undid the decision at `level` (for SAT, the backjump target level).
 export interface BacktrackEvent {
   v: typeof PROTOCOL_VERSION;
   t: "backtrack";
   level: number;
+  engine?: Engine;
+}
+
+// A learned clause from SAT 1UIP analysis, its literals in puzzle/variable coordinates.
+export interface LearnEvent {
+  v: typeof PROTOCOL_VERSION;
+  t: "learn";
+  clause: number[];
+  engine?: Engine;
+}
+
+// A SAT restart fired: the trail unwound to level 0, learned clauses and activities kept.
+export interface RestartEvent {
+  v: typeof PROTOCOL_VERSION;
+  t: "restart";
+  engine?: Engine;
 }
 
 // A full solution: cell/value pairs, puzzle-relative.
@@ -59,15 +87,19 @@ export interface SolutionEvent {
   v: typeof PROTOCOL_VERSION;
   t: "solution";
   assignment: [number, number][];
+  engine?: Engine;
 }
 
 // A sound proof that no solution exists.
 export interface UnsatEvent {
   v: typeof PROTOCOL_VERSION;
   t: "unsat";
+  engine?: Engine;
 }
 
-// Running counters (the UI also derives these by tallying the stream).
+// Running counters (the UI also derives these by tallying the stream). The SAT counters
+// `learnedClauses` and `restarts` are tallied UI-side from the learn/restart events, so this event
+// keeps its four CP counters rather than widening.
 export interface StatsEvent {
   v: typeof PROTOCOL_VERSION;
   t: "stats";
@@ -75,6 +107,7 @@ export interface StatsEvent {
   propagations: number;
   backtracks: number;
   conflicts: number;
+  engine?: Engine;
 }
 
 export type SolverEvent =
@@ -82,6 +115,8 @@ export type SolverEvent =
   | PropagateEvent
   | ConflictEvent
   | BacktrackEvent
+  | LearnEvent
+  | RestartEvent
   | SolutionEvent
   | UnsatEvent
   | StatsEvent;
@@ -96,6 +131,7 @@ export interface StartControl {
   kind: PuzzleKind; // which encoder the server routes the definition to
   puzzle: string; // the raw puzzle definition the server parses
   mode: Mode;
+  engine?: Engine; // which solver runs; absent defaults to cp on the server (additive, v1)
 }
 
 export interface StepControl {
