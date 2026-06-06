@@ -50,6 +50,7 @@ library
                       Lattice.Core.Types
                       Lattice.Core.Domain
                       Lattice.CP.Propagator
+                      Lattice.CP.Queue
     build-depends:    base       >=4.21 && <4.22
                     , containers >=0.7  && <0.9
                     , vector     >=0.13 && <0.14
