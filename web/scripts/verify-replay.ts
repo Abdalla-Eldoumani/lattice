@@ -10,7 +10,7 @@
 //
 //   start lattice-server on :8080, then:  npm run verify:replay
 
-import { parseEvent, type PuzzleKind } from "../lib/protocol";
+import { parseEvent, type Engine, type PuzzleKind } from "../lib/protocol";
 import {
   applyEvent,
   gridToString,
@@ -23,10 +23,12 @@ const SERVER = process.env.SOLVER_WS ?? "ws://127.0.0.1:8080/";
 
 // A case carries the kind the server routes on (sent on `start`), the raw definition, and a checker.
 // Sudoku uses an exact-string check; graph/queens validate the reconstructed assignment structurally.
+// `engine` selects the solver (absent defaults to cp on the server); the SAT case sets it to "sat".
 interface Case {
   name: string;
   kind: PuzzleKind;
   puzzle: string;
+  engine?: Engine;
   // returns ok + a human detail; given the final reducer state and the engine's solution assignment.
   check: (state: ReplayState, assignment: [number, number][]) => { ok: boolean; detail: string };
 }
@@ -193,6 +195,62 @@ function checkQueens(n: number) {
   };
 }
 
+// The bundled sat-demo CNF (a copy of puzzles/cnf/sat-demo.cnf): a small satisfiable instance over 3
+// variables. The server's `dimacs` kind parses this raw text via the total parseDimacs; the SAT engine
+// solves it and streams the reasoning, ending in a `solution` whose assignment must satisfy every clause.
+const SAT_DEMO_CNF = "c sat-demo over 3 variables\np cnf 3 3\n1 -2 0\n2 3 0\n-1 -3 0\n";
+
+// Parse DIMACS clauses into arrays of signed 1-based literals (the same convention the engine's
+// `solution` assignment and `learn` clauses use). Comments and the header are skipped; this is the
+// independent oracle side of the check, so it shares no code with the engine's own parser.
+function parseDimacsClauses(text: string): number[][] {
+  const toks = text
+    .split("\n")
+    .filter((line) => !/^\s*(c|p)\b/.test(line))
+    .join(" ")
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+    .map(Number);
+  const clauses: number[][] = [];
+  let cur: number[] = [];
+  for (const lit of toks) {
+    if (lit === 0) {
+      clauses.push(cur);
+      cur = [];
+    } else {
+      cur.push(lit);
+    }
+  }
+  return clauses;
+}
+
+// A SAT check: reconstruct the satisfying assignment from the engine's `solution` event (each pair is
+// `[variable, polarity]`, polarity 0/1 in puzzle coordinates) and assert it satisfies every clause of
+// the CNF. A clause is satisfied when at least one of its signed literals is true under the assignment
+// (a positive literal `v` true iff variable `v-1` is 1; a negative literal `-v` true iff it is 0). This
+// is the structural validator (the checkGraphColoring analog), not an exact-string check.
+function checkCnf(cnfText: string) {
+  const clauses = parseDimacsClauses(cnfText);
+  return (_state: ReplayState, assignment: [number, number][]) => {
+    const value = new Map<number, number>(assignment); // variable -> polarity (0/1)
+    for (const clause of clauses) {
+      const sat = clause.some((lit) => {
+        const v = Math.abs(lit) - 1; // engine variable is 0-based; DIMACS is 1-based
+        const pol = value.get(v);
+        if (pol === undefined) return false;
+        return lit > 0 ? pol === 1 : pol === 0;
+      });
+      if (!sat) {
+        return { ok: false, detail: `clause [${clause.join(" ")}] is unsatisfied by the assignment` };
+      }
+    }
+    return {
+      ok: true,
+      detail: `reconstructed a satisfying assignment for all ${clauses.length} clauses`,
+    };
+  };
+}
+
 const CASES: Case[] = [
   {
     name: "diff-4x4",
@@ -240,6 +298,13 @@ const CASES: Case[] = [
     puzzle: HARD_NONOGRAM_DEF,
     check: checkHardNonogram(HARD_NONOGRAM_SOLUTION),
   },
+  {
+    name: "sat-dimacs",
+    kind: "dimacs",
+    puzzle: SAT_DEMO_CNF,
+    engine: "sat",
+    check: checkCnf(SAT_DEMO_CNF),
+  },
 ];
 
 function initialFor(c: Case): ReplayState {
@@ -258,8 +323,18 @@ function runCase(c: Case): Promise<{ name: string; ok: boolean; detail: string }
       resolve({ name: c.name, ok, detail });
     };
     ws.addEventListener("open", () =>
-      // send the kind so the server routes the definition to the right encoder.
-      ws.send(JSON.stringify({ v: 1, t: "start", kind: c.kind, puzzle: c.puzzle, mode: "trace" })),
+      // send the kind so the server routes the definition to the right encoder, and the engine so a
+      // SAT case runs the CDCL solver (absent, the server defaults to cp).
+      ws.send(
+        JSON.stringify({
+          v: 1,
+          t: "start",
+          kind: c.kind,
+          puzzle: c.puzzle,
+          mode: "trace",
+          ...(c.engine ? { engine: c.engine } : {}),
+        }),
+      ),
     );
     ws.addEventListener("message", (e) => {
       const ev = parseEvent(String((e as MessageEvent).data));
