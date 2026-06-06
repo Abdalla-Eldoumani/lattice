@@ -17,12 +17,13 @@ import Lattice.Event (protocolVersion)
 
 {- | A control message from the client. 'Start' begins a solve of the given puzzle definition in the
 given mode (@"trace"@ or @"fast"@); its first field is the puzzle @kind@ (@"sudoku"@, @"graph"@,
-@"queens"@, @"nonogram"@), which the server routes to the matching encoder. The rest drive
+@"queens"@, @"nonogram"@, @"dimacs"@), which the server routes to the matching encoder, and its last
+is the @engine@ (@"cp"@, @"sat"@, @"race"@) selecting which solver runs. The rest drive
 single-stepping and playback of a trace.
 -}
 data Control
-  = -- | @Start kind puzzle mode@
-    Start Text Text Text
+  = -- | @Start kind puzzle mode engine@
+    Start Text Text Text Text
   | Step
   | Play Double
   | Pause
@@ -34,8 +35,8 @@ tagged :: String -> [Pair] -> Aeson.Value
 tagged t fields = object (("v" .= protocolVersion) : ("t" .= t) : fields)
 
 instance ToJSON Control where
-  toJSON (Start kind puzzle mode) =
-    tagged "start" ["kind" .= kind, "puzzle" .= puzzle, "mode" .= mode]
+  toJSON (Start kind puzzle mode engine) =
+    tagged "start" ["kind" .= kind, "puzzle" .= puzzle, "mode" .= mode, "engine" .= engine]
   toJSON Step = tagged "step" []
   toJSON (Play speed) = tagged "play" ["speed" .= speed]
   toJSON Pause = tagged "pause" []
@@ -45,9 +46,14 @@ instance FromJSON Control where
   parseJSON = withObject "control" $ \o -> do
     t <- o .: "t"
     case (t :: String) of
-      -- @kind@ defaults to "sudoku" so an old kindless start (the v1 contract before this field)
-      -- still decodes; the field is additive and the protocol stays at v1.
-      "start" -> Start <$> o .:? "kind" .!= "sudoku" <*> o .: "puzzle" <*> o .: "mode"
+      -- @kind@ defaults to "sudoku" and @engine@ to "cp" so an old kindless/engineless start (the
+      -- v1 contract before these fields) still decodes; both are additive and the protocol stays v1.
+      "start" ->
+        Start
+          <$> o .:? "kind" .!= "sudoku"
+          <*> o .: "puzzle"
+          <*> o .: "mode"
+          <*> o .:? "engine" .!= "cp"
       "step" -> pure Step
       "play" -> Play <$> o .: "speed"
       "pause" -> pure Pause
