@@ -2,7 +2,7 @@
 // domain model. Kept free of React so both the `useSolver` hook and the headless replay check drive
 // the exact same logic. Backtracks restore faithfully via a per-decision-level snapshot stack.
 
-import type { SolverEvent } from "./protocol";
+import type { PuzzleKind, SolverEvent } from "./protocol";
 
 export type CellStatus = "given" | "open" | "decided" | "solved" | "conflict";
 
@@ -24,6 +24,9 @@ export interface Counters {
 export interface ReplayState {
   grid: Grid;
   size: number;
+  // The nonogram needs both grid dimensions to lay out its clue tracks; `size` carries cols and this
+  // carries rows. Undefined for square puzzles where `size` alone (n x n) is the shape.
+  nonoRows?: number;
   // The snapshot stack is bookkeeping, not rendered; it is mutated in place across a replay.
   snapshots: Map<number, Grid>;
   counters: Counters;
@@ -56,8 +59,7 @@ export function parseGridText(text: string): { grid: Grid; size: number } {
   return { grid, size: n };
 }
 
-export function initialState(text: string): ReplayState {
-  const { grid, size } = parseGridText(text);
+function emptyState(grid: Grid, size: number): ReplayState {
   return {
     grid,
     size,
@@ -67,6 +69,76 @@ export function initialState(text: string): ReplayState {
     lastReason: "",
     solved: false,
   };
+}
+
+export function initialState(text: string): ReplayState {
+  const { grid, size } = parseGridText(text);
+  return emptyState(grid, size);
+}
+
+// Build the initial model for a given puzzle kind. The client owns geometry per kind: Sudoku parses
+// the grid text; the other kinds seed a non-empty grid of `open` cells (sized from the definition
+// where it is cheap to read) so the canvas is never a spinner. The exact geometry of the non-Sudoku
+// renderers is their own concern; this only seeds a model the dispatcher can render.
+export function initialStateForKind(kind: PuzzleKind, definition: string): ReplayState {
+  if (kind === "sudoku") return initialState(definition);
+  if (kind === "nonogram") return nonogramInitialState(definition);
+  const count = seedCount(kind, definition);
+  const size = Math.max(1, Math.round(Math.sqrt(count)));
+  const grid: Grid = Array.from({ length: count }, () => ({
+    value: null,
+    candidates: [],
+    status: "open" as CellStatus,
+  }));
+  return emptyState(grid, size);
+}
+
+// The nonogram seeds one boolean cell per grid index r*cols + c with the full {0,1} candidate set,
+// so a `propagate removed=0/1` tracks which bit a line clue eliminated (the renderer reads the
+// remaining candidates: {1} -> forced ink, {0} -> forced blank, {0,1} -> still unknown). `size` is
+// `cols` so callers can recover the grid shape; `nonoRows` carries the row count for the renderer.
+function nonogramInitialState(definition: string): ReplayState {
+  const { rows, cols } = nonogramDims(definition);
+  const grid: Grid = Array.from({ length: rows * cols }, () => ({
+    value: null,
+    candidates: [0, 1],
+    status: "open" as CellStatus,
+  }));
+  return { ...emptyState(grid, cols), nonoRows: rows };
+}
+
+// Read the rows/cols from a bundled nonogram definition; a malformed definition falls back to a
+// small square so the canvas still renders rather than throwing.
+export function nonogramDims(definition: string): { rows: number; cols: number } {
+  try {
+    const d = JSON.parse(definition) as { rows?: number; cols?: number };
+    if (Number.isInteger(d.rows) && Number.isInteger(d.cols) && d.rows! > 0 && d.cols! > 0) {
+      return { rows: d.rows!, cols: d.cols! };
+    }
+  } catch {
+    // a malformed definition still seeds a default-sized model
+  }
+  return { rows: 10, cols: 10 };
+}
+
+// How many seed cells a non-Sudoku, non-nonogram kind shows before any event arrives. Read cheaply
+// from the definition (graph vertex count, queens N squared); fall back to a small non-empty default.
+function seedCount(kind: PuzzleKind, definition: string): number {
+  if (kind === "queens") {
+    const n = Number(definition.trim());
+    return Number.isInteger(n) && n > 0 ? n * n : 64;
+  }
+  if (kind === "graph") {
+    try {
+      const vs = (JSON.parse(definition) as { vertices?: unknown[] }).vertices;
+      if (Array.isArray(vs) && vs.length > 0) return vs.length;
+    } catch {
+      // a malformed definition still seeds a default-sized model
+    }
+    return 10;
+  }
+  // any future kind: a small non-empty placeholder model
+  return 100;
 }
 
 // Apply one event, returning the next state. The rendered fields (grid, counters, ...) are produced
