@@ -2,9 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [master, 'feat/**']
   pull_request:
-    branches: [main]
+    branches: [master]
 
 # Cancel superseded runs on the same ref so a fast push does not queue behind a stale build.
 concurrency:
