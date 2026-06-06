@@ -1,53 +1,63 @@
-{- | Backtracking search. Propagate to a fixpoint, then either read off the solution (every variable
-a singleton), fail the branch (a conflict emptied a domain), or make a decision and try its values.
-Backtracking is implicit and free: 'assign' builds a fresh domain map, so the map at the decision
-point is untouched and serves as the undo log.
-
-Phase 2 fills the ordering slots (ORDER-01/02/03): the production search selects the
-most-constrained variable (smallest domain, MRV) with a degree tie-break, and tries values in
-least-constraining order (LCV). Ordering changes how much the search explores, never which answers
-are valid. 'searchStats' exposes a decision count and a strategy knob so a test can show MRV cuts
-decisions on hard-17 versus the old naive in-order selection.
+{- | Backtracking search, in two modes (EVENT-01). 'searchCore' is the loop generic over the monad:
+it propagates (through 'propagateM', so propagation events flow too), makes a decision on the
+most-constrained variable, and emits a 'Decision' as it branches, a 'Backtrack' when a branch fails,
+and a 'Solution' when every variable is a singleton. 'search' and 'searchStats' are the pure
+fast-mode instantiations — @Identity@ with 'noEmit' — which the compiler reduces to the original
+allocation-free loop. Ordering changes how much is explored, never which answers are valid.
 -}
 module Lattice.CP.Search (
   search,
   Strategy (..),
   searchStats,
+  searchCore,
 ) where
 
+import Data.Functor.Identity (runIdentity)
 import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
 import Data.List (minimumBy, sortOn)
 import Data.Ord (comparing)
 import Lattice.CP.Propagator (constraintVars)
-import Lattice.CP.Queue (propagate)
+import Lattice.CP.Queue (propagateM)
 import Lattice.Core.Domain (assign, domainOf, singletonValue, unassignedVars)
 import Lattice.Core.Types (Assignment, Constraint, Domain (..), Domains, Value, Var)
+import Lattice.Event qualified as Ev
 
-{- | Variable- and value-ordering strategy. 'Naive' is the original first-unassigned + natural-order
-selection; 'Mrv' is MRV with a degree tie-break and least-constraining-value ordering.
+{- | Variable- and value-ordering strategy. 'Naive' is first-unassigned + natural order; 'Mrv' is
+MRV with a degree tie-break and least-constraining-value ordering.
 -}
 data Strategy = Naive | Mrv
   deriving (Eq, Show)
 
--- | Production search: MRV/degree variable selection and LCV value ordering.
+-- | Production search: MRV/degree variable selection and LCV value ordering, fast mode.
 search :: [Constraint] -> Domains -> Maybe Assignment
-search cs ds = fst (searchStats Mrv cs ds)
+search cs ds = fst (runIdentity (searchCore Ev.noEmit Mrv cs ds))
+{-# INLINE search #-}
 
-{- | Search returning the solution (if any) and the number of decisions taken — each value branch
-entered, counting backtracks. The decision count is what makes "MRV reduces search" measurable.
+{- | Search returning the solution (if any) and the decision count, fast mode. Used to measure that
+MRV reduces decisions versus naive ordering.
 -}
 searchStats :: Strategy -> [Constraint] -> Domains -> (Maybe Assignment, Int)
-searchStats strat cs ds0 = go ds0 0
+searchStats strat cs ds = runIdentity (searchCore Ev.noEmit strat cs ds)
+
+{- | The search loop generic over the monad. Returns the solution (if any) and the decision count,
+and emits the decision/propagate/conflict/backtrack/solution stream as it runs.
+-}
+searchCore
+  :: (Monad m) => Ev.Emit m -> Strategy -> [Constraint] -> Domains -> m (Maybe Assignment, Int)
+searchCore emit strat cs ds0 = go ds0 0 0
  where
   degree = degreeMap cs
   neighbors = neighborMap cs
 
-  go ds !n =
-    case propagate cs ds of
-      Left _ -> (Nothing, n)
+  go ds level n = do
+    r <- propagateM emit cs ds
+    case r of
+      Left _ -> pure (Nothing, n)
       Right ds' -> case unassignedVars ds' of
-        [] -> (Just (readAssignment ds'), n)
+        [] ->
+          let asn = readAssignment ds'
+           in emit (Ev.Solution (IntMap.toList asn)) >> pure (Just asn, n)
         us@(u0 : _) ->
           let x = case strat of
                 Naive -> u0
@@ -55,21 +65,22 @@ searchStats strat cs ds0 = go ds0 0
               vs = case strat of
                 Naive -> candidates x ds'
                 Mrv -> sortOn (lcvCost ds' x) (candidates x ds')
-           in tryValues ds' x vs n
+           in tryValues ds' level x vs n
 
-  -- Most-constrained variable: smallest domain, breaking ties toward the highest static degree.
   mrvKey ds' v = (domainSize v ds', negate (IntMap.findWithDefault 0 v degree))
 
-  -- Least-constraining value: how many of x's neighbours still hold v (fewer is preferred).
   lcvCost ds' x v =
     length [u | u <- IntSet.toList (IntMap.findWithDefault IntSet.empty x neighbors), holds v u ds']
   holds v u ds' = case domainOf u ds' of Domain s -> v `IntSet.member` s
 
-  tryValues _ _ [] n = (Nothing, n)
-  tryValues ds' x (v : rest) n =
-    case go (assign x v ds') (n + 1) of
-      (Just a, n') -> (Just a, n')
-      (Nothing, n') -> tryValues ds' x rest n'
+  tryValues _ _ _ [] n = pure (Nothing, n)
+  tryValues ds' level x (v : rest) n = do
+    emit (Ev.Decision x v level)
+    (res, n') <- go (assign x v ds') (level + 1) (n + 1)
+    case res of
+      Just a -> pure (Just a, n')
+      Nothing -> emit (Ev.Backtrack level) >> tryValues ds' level x rest n'
+{-# INLINEABLE searchCore #-}
 
 -- | Read a fully decided map (every domain a singleton) off as an assignment.
 readAssignment :: Domains -> Assignment

@@ -24,7 +24,7 @@ domains actually shrank plus the updated map; 'Conflict' means some domain becam
 data PropResult
   = Changed [Var] Domains
   | Unchanged
-  | Conflict
+  | Conflict Var
   deriving (Eq, Show)
 
 -- | Run one constraint over the current domains, reporting the real shrinks and any conflict.
@@ -66,9 +66,10 @@ propagateConstraint (AllDiffOffset pairs) ds =
     | otherwise = (curDs, sh)
    where
     next = removeValue (x + offi - offj) vj curDs
-propagateConstraint (SumEq vars c) ds
-  | any (\v -> isEmpty (domainOf v ds)) vars = Conflict
-  | otherwise =
+propagateConstraint (SumEq vars c) ds =
+  case filter (\v -> isEmpty (domainOf v ds)) vars of
+    (v : _) -> Conflict v
+    [] ->
       let (ds', shrunk) = foldl' tighten (ds, []) vars
        in finalize vars ds' shrunk
  where
@@ -82,7 +83,8 @@ propagateConstraint (SumEq vars c) ds
           then (curDs, sh)
           else (IntSet.foldr (`removeValue` v) curDs bad, v : sh)
 propagateConstraint (LessEq a b) ds
-  | isEmpty (domainOf a ds) || isEmpty (domainOf b ds) = Conflict
+  | isEmpty (domainOf a ds) = Conflict a
+  | isEmpty (domainOf b ds) = Conflict b
   | otherwise =
       let Domain sa = domainOf a ds
           Domain sb = domainOf b ds
@@ -97,10 +99,11 @@ propagateConstraint (LessEq a b) ds
 duplicates removed) as 'Changed', or 'Unchanged' when nothing moved.
 -}
 finalize :: [Var] -> Domains -> [Var] -> PropResult
-finalize vars ds' shrunk
-  | any (\y -> isEmpty (domainOf y ds')) vars = Conflict
-  | null shrunk = Unchanged
-  | otherwise = Changed (IntSet.toList (IntSet.fromList shrunk)) ds'
+finalize vars ds' shrunk = case filter (\y -> isEmpty (domainOf y ds')) vars of
+  (y : _) -> Conflict y
+  []
+    | null shrunk -> Unchanged
+    | otherwise -> Changed (IntSet.toList (IntSet.fromList shrunk)) ds'
 
 -- | The least value in a non-empty domain (callers guard emptiness first).
 domMin :: Domain -> Value
