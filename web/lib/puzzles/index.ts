@@ -14,6 +14,10 @@ export interface PuzzleDef {
   kind: PuzzleKind;
   label: string;
   definition: string;
+  // A dual-encodable instance (one the server can build as BOTH a CP model and a CNF) can race the
+  // two engines; the engine picker offers `cp vs sat` only for these. Graph coloring is the dual-
+  // encodable kind (graphCNF); the dimacs fixtures are SAT-only, the CP puzzles CP-only.
+  dualEncodable?: boolean;
 }
 
 // A copy of puzzles/graph/petersen.json, bundled so the client owns its definition. The server's
@@ -95,6 +99,25 @@ const HARD_GRAPH = JSON.stringify({
   ],
 });
 
+// Copies of puzzles/cnf/sat-demo.cnf and unsat-demo.cnf, bundled as raw DIMACS text so the client
+// owns the definition and the TrailView seeds its variable count from the `p cnf N M` header. The
+// server's dimacs arm runs parseDimacs over the same text. sat-demo is satisfiable (x1,x2 true,
+// x3 false); unsat-demo's two unit clauses (x1) and (¬x1) contradict.
+const SAT_DEMO_CNF =
+  "c sat-demo: a small satisfiable CNF over 3 variables.\n" +
+  "c A satisfying assignment is x1=true, x2=true, x3=false.\n" +
+  "p cnf 3 3\n" +
+  "1 -2 0\n" +
+  "2 3 0\n" +
+  "-1 -3 0\n";
+
+const UNSAT_DEMO_CNF =
+  "c unsat-demo: a small unsatisfiable CNF over 1 variable.\n" +
+  "c The unit clauses (x1) and (not x1) contradict, so no assignment satisfies both.\n" +
+  "p cnf 1 2\n" +
+  "1 0\n" +
+  "-1 0\n";
+
 // The picker entries, in display order. The first key is the default selection.
 export const PUZZLES: Record<string, PuzzleDef> = {
   "sudoku-easy": {
@@ -118,6 +141,9 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     kind: "graph",
     label: "graph · petersen",
     definition: PETERSEN,
+    // Dual-encodable: the server builds both the CP graph model and graphCNF from this, so it can
+    // race cp vs sat on the genuinely same instance (the race two-panel layout lands in plan 08).
+    dualEncodable: true,
   },
   "graph-hard": {
     kind: "graph",
@@ -143,6 +169,16 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     kind: "nonogram",
     label: "nonogram · hard",
     definition: HARD_NONOGRAM,
+  },
+  "cnf-sat-demo": {
+    kind: "dimacs",
+    label: "cnf · sat-demo",
+    definition: SAT_DEMO_CNF,
+  },
+  "cnf-unsat-demo": {
+    kind: "dimacs",
+    label: "cnf · unsat-demo",
+    definition: UNSAT_DEMO_CNF,
   },
 };
 
