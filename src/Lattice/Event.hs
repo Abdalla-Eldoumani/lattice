@@ -22,14 +22,22 @@ import Lattice.Core.Types (Level, Value, Var)
 protocolVersion :: Int
 protocolVersion = 1
 
-{- | A server-to-client event. The CP engine emits the first six; 'Stats' carries the running
-counters. (SAT's @learned@ and @restart@ events arrive in Phase 5.)
+{- | A server-to-client event. The CP engine emits Decision/Propagate/Conflict/Backtrack/Solution/
+Unsat; 'Stats' carries the running counters. 'Learned' and 'Restart' are the two SAT-specific
+additions: a learned clause (its literals in puzzle/variable coordinates) and a restart firing. They
+are additive — the protocol stays at v1 and the front end derives the @learnedClauses@/@restarts@
+counters by tallying these events, so 'Stats' keeps its existing four-counter arity rather than
+widening.
 -}
 data Event
   = Decision Var Value Level
   | Propagate Var Value
   | Conflict Var
   | Backtrack Level
+  | -- | A learned clause from 1UIP analysis, as literals in puzzle/variable coordinates.
+    Learned [Int]
+  | -- | A restart fired: the trail unwound to level 0, learned clauses and activities kept.
+    Restart
   | Solution [(Var, Value)]
   | Unsat
   | Stats Int Int Int Int
@@ -55,6 +63,8 @@ instance ToJSON Event where
   toJSON (Propagate c x) = tagged "propagate" ["cell" .= c, "removed" .= x]
   toJSON (Conflict c) = tagged "conflict" ["cell" .= c]
   toJSON (Backtrack l) = tagged "backtrack" ["level" .= l]
+  toJSON (Learned ls) = tagged "learn" ["clause" .= ls]
+  toJSON Restart = tagged "restart" []
   toJSON (Solution a) = tagged "solution" ["assignment" .= a]
   toJSON Unsat = tagged "unsat" []
   toJSON (Stats d p b c) =
@@ -68,6 +78,8 @@ instance FromJSON Event where
       "propagate" -> Propagate <$> o .: "cell" <*> o .: "removed"
       "conflict" -> Conflict <$> o .: "cell"
       "backtrack" -> Backtrack <$> o .: "level"
+      "learn" -> Learned <$> o .: "clause"
+      "restart" -> pure Restart
       "solution" -> Solution <$> o .: "assignment"
       "unsat" -> pure Unsat
       "stats" ->
