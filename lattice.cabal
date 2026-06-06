@@ -114,6 +114,7 @@ test-suite lattice-test
                     , vector
                     , text
                     , bytestring
+                    , aeson
                     , tasty            >=1.5 && <1.6
                     , tasty-hunit      >=0.10 && <0.11
                     , tasty-quickcheck >=0.11 && <0.12

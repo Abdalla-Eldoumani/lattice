@@ -1,4 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- The test module defines an 'Arbitrary' instance for the library's 'Event' (an orphan): the
+-- library must not depend on QuickCheck, so the generator lives here, with orphans waived for tests.
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 {- | Test entry point. This suite is the correctness contract for the whole project: a
 propagation or backtracking bug is invisible on easy puzzles and wrong on hard ones, and the only
@@ -9,8 +12,10 @@ pin the recorded solutions for the larger known puzzles.
 -}
 module Main (main) where
 
+import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BL
 import Data.Char (intToDigit, isDigit)
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
 import Data.List (intercalate)
@@ -22,10 +27,13 @@ import Lattice (Result (..), decode, parseGrid, solve, toModel, version)
 import Lattice.Brute qualified as Brute
 import Lattice.CP.Queue (propagate)
 import Lattice.CP.Search (Strategy (..), searchStats)
+import Lattice.CP.Solver (solveTrace)
 import Lattice.Core.Domain (domainOf)
 import Lattice.Core.Types (Assignment, Constraint (..), Domain (..), Model (..))
 import Lattice.Encode.Graph (Graph (..), graphModel, parseGraph)
 import Lattice.Encode.Queens (queensModel)
+import Lattice.Event (Event (..))
+import Lattice.Protocol (Control (..))
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.Golden (goldenVsString)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -38,6 +46,7 @@ import Test.Tasty.QuickCheck (
   elements,
   forAll,
   frequency,
+  oneof,
   property,
   shuffle,
   sublistOf,
@@ -62,6 +71,8 @@ tests =
     , queens
     , ordering
     , sumComparison
+    , eventProtocol
+    , traceMode
     ]
 
 smoke :: TestTree
@@ -398,3 +409,65 @@ genSumCompModel = do
       { modelDomains = domains
       , modelConstraints = SumEq vars (sum witness) : [LessEq a b | (a, b) <- comps]
       }
+
+{- | The event protocol (EVENT-02): the versioned, tagged JSON round-trips — encoding an event and
+decoding it back is the identity.
+-}
+eventProtocol :: TestTree
+eventProtocol =
+  testGroup
+    "protocol"
+    [ testProperty "event JSON round-trips (encode then decode is identity)" prop_eventRoundTrip
+    , testProperty "control JSON round-trips (encode then decode is identity)" prop_controlRoundTrip
+    ]
+
+prop_eventRoundTrip :: Event -> Property
+prop_eventRoundTrip e = Aeson.decode (Aeson.encode e) === Just e
+
+prop_controlRoundTrip :: Control -> Property
+prop_controlRoundTrip c = Aeson.decode (Aeson.encode c) === Just c
+
+instance Arbitrary Control where
+  arbitrary =
+    oneof
+      [ Start . T.pack <$> arbitrary <*> (T.pack <$> arbitrary)
+      , pure Step
+      , Play <$> choose (0.1, 16.0)
+      , pure Pause
+      , pure Restart
+      ]
+
+{- | Trace mode (EVENT-01): solving a small instance emits a coherent event stream — propagation
+events as candidates are pruned, and a final 'Solution' event whose assignment matches the result.
+-}
+traceMode :: TestTree
+traceMode = testCase "trace mode emits a coherent event stream ending in a solution" $ do
+  raw <- TIO.readFile "puzzles/sudoku/diff-4x4.txt"
+  case parseGrid raw of
+    Left e -> assertFailure ("parse failed: " <> show e)
+    Right g -> do
+      ref <- newIORef []
+      result <- solveTrace (\e -> modifyIORef' ref (e :)) (toModel g)
+      events <- reverse <$> readIORef ref
+      case result of
+        NoSolution -> assertFailure "expected a solution"
+        Solved a -> do
+          assertBool "expected propagate events" (any isPropagate events)
+          case reverse events of
+            (Solution pairs : _) -> IntMap.fromList pairs @?= a
+            _ -> assertFailure "the last event should be a Solution matching the result"
+ where
+  isPropagate Propagate {} = True
+  isPropagate _ = False
+
+instance Arbitrary Event where
+  arbitrary =
+    oneof
+      [ Decision <$> arbitrary <*> arbitrary <*> arbitrary
+      , Propagate <$> arbitrary <*> arbitrary
+      , Conflict <$> arbitrary
+      , Backtrack <$> arbitrary
+      , Solution <$> arbitrary
+      , pure Unsat
+      , Stats <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
+      ]
