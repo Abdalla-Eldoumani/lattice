@@ -1,0 +1,5 @@
+# Walkthrough screenshots are generated artifacts (npm run walkthrough). The full set across every
+# breakpoint and view is regenerated on demand and is not committed; a small curated hero set lives in
+# public/screenshots/ so docs can reference it. See scripts/WALKTHROUGH.md.
+# Anchored to the web root (leading slash) so it ignores web/screenshots/ only — not public/screenshots/.
+/screenshots/
