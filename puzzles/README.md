@@ -1,7 +1,8 @@
 # Puzzle formats
 
 Sample instances the engine and the gallery load. Every instance here has been verified:
-Sudoku puzzles have exactly one solution, the graph carries a fixed layout.
+Sudoku puzzles have exactly one solution, the graph carries a fixed layout, and each `hard`
+preset is verified to make the search backtrack (see Hard presets below).
 
 ## Sudoku (`sudoku/*.txt`)
 
@@ -25,12 +26,44 @@ all solutions exhaustively and compare against the engine.
 a stable layout and never re-runs a force simulation. Adjacency drives the solver
 (an all-different / not-equal constraint per edge).
 
+`graph/hard.json` is a dense 10-vertex 4-chromatic graph (uncolorable at k=3) chosen so the
+CP search backtracks 3 times before recovering at k=4. The named Grotzsch graph was tried
+first but colors greedily (0 backtracks) under this engine's LCV value ordering, so a
+verified-backtracking instance ships instead.
+
+## Nonogram (`nonogram/*.json`)
+
+```
+{ "name", "kind": "nonogram",
+  "rows": <r>, "cols": <c>,
+  "rowClues": [ [run, ...], ... ],   // one run-length list per row, top to bottom
+  "colClues": [ [run, ...], ... ],   // one run-length list per column, left to right
+  "solution": [ "0110...", ... ] }   // optional: the 0/1 picture, one string per row
+```
+
+The encoder builds one boolean variable per cell (0 blank, 1 ink) and one `LineClue`
+constraint per row and column. Keep lines short (<= ~15 cells) so the propagator's placement
+enumeration stays cheap. `nonogram/heart.json` is the 10x10 round-trip picture;
+`nonogram/hard.json` is a 7x7 that needs search past line arc-consistency (10 decisions,
+4 backtracks under MRV).
+
 ## N-queens
 
-Parametric, no file. The CLI and gallery take `N` directly.
+Parametric, no file. The CLI and gallery take `N` directly. `queens · 12 (hard)` in the
+gallery is the hard preset: N=12 backtracks 33 times before placing all twelve queens.
+
+## Hard presets (VIZ-07)
+
+Each puzzle kind has a `hard` preset in the gallery picker that makes the search visibly
+struggle and recover. The rule for a hard preset: it must be solvable AND its event stream
+must contain at least one `backtrack` (a fixture that solves by pure propagation does not
+exercise search). The `verify-replay` nonogram-hard case asserts `backtracks >= 1`
+programmatically, and the graph / queens hard presets were verified to backtrack with the
+engine (counting `Backtrack` events via `solveTrace`) before commit.
 
 ## Adding instances
 
-Verify before committing: a Sudoku instance must have exactly one solution (check with the
-brute-force solver), and a graph instance must include coordinates for every vertex. Do not
-commit an instance you have not verified.
+Verify before committing: a Sudoku or nonogram instance must have exactly one solution
+(check with the brute-force solver or independent placement enumeration), a graph instance
+must include coordinates for every vertex, and a `hard` preset must be verified to backtrack
+with the engine. Do not commit an instance you have not verified.
