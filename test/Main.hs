@@ -14,23 +14,26 @@ import Data.Char (intToDigit, isDigit)
 import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
 import Data.List (intercalate)
-import Data.Maybe (isNothing, mapMaybe)
+import Data.Maybe (isJust, isNothing, mapMaybe)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
 import Lattice (Result (..), decode, parseGrid, solve, toModel, version)
 import Lattice.Brute qualified as Brute
 import Lattice.CP.Queue (propagate)
+import Lattice.CP.Search (Strategy (..), searchStats)
 import Lattice.Core.Domain (domainOf)
-import Lattice.Core.Types (Assignment, Constraint (..), Domain (..))
-import Lattice.Encode.Sudoku (Model (..))
+import Lattice.Core.Types (Assignment, Constraint (..), Domain (..), Model (..))
+import Lattice.Encode.Graph (Graph (..), graphModel, parseGraph)
+import Lattice.Encode.Queens (queensModel)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.Golden (goldenVsString)
-import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 import Test.Tasty.QuickCheck (
   Arbitrary (..),
   Gen,
   Property,
+  choose,
   counterexample,
   elements,
   forAll,
@@ -55,6 +58,10 @@ tests =
     , encoderOracle
     , correctness
     , golden
+    , graph
+    , queens
+    , ordering
+    , sumComparison
     ]
 
 smoke :: TestTree
@@ -95,7 +102,7 @@ roundTrip path expected = do
       let model = toModel g
        in case Brute.solveFirst model of
             Nothing -> assertFailure "oracle found no solution"
-            Just a -> decode model a @?= expected
+            Just a -> decode g a @?= expected
 
 {- | The four correctness groups, the reason the project exists. Each compares the CP engine to the
 independent oracle on generated 4x4 instances; the unsat path also runs on a deterministic fixture.
@@ -140,7 +147,7 @@ cpSolutionBytes path = do
     Right g ->
       let model = toModel g
        in case solve model of
-            Solved a -> encode (decode model a)
+            Solved a -> encode (decode g a)
             NoSolution -> encode "no solution"
  where
   encode = BL.fromStrict . TE.encodeUtf8
@@ -180,11 +187,16 @@ givens (no search) must never remove a value that appears in some real solution.
 prunes a real answer is the silent-killer bug; this is its guard.
 -}
 prop_soundProp :: Property
-prop_soundProp = forAll genSatGrid $ \gridStr ->
-  let model = gridModel gridStr
-      sols = Brute.solveAll model
+prop_soundProp = forAll genSatGrid (soundPropHolds . gridModel)
+
+{- | Sound propagation on a satisfiable model: one fixpoint from the givens keeps every value that
+appears in some solution. Shared by the Sudoku and the sum/comparison groups.
+-}
+soundPropHolds :: Model -> Property
+soundPropHolds m =
+  let sols = Brute.solveAll m
       unionVals = IntMap.unionsWith IntSet.union [IntMap.map IntSet.singleton a | a <- sols]
-   in case propagate (modelConstraints model) (modelDomains model) of
+   in case propagate (modelConstraints m) (modelDomains m) of
         Left _ -> counterexample "propagation reported a conflict despite a real solution" False
         Right ds ->
           property $
@@ -220,6 +232,15 @@ satisfies model asn = all holds (modelConstraints model)
   holds (NotEqual a b) = case (IntMap.lookup a asn, IntMap.lookup b asn) of
     (Just x, Just y) -> x /= y
     _ -> False
+  holds (AllDiffOffset pairs) =
+    let xs = mapMaybe (\(v, off) -> (+ off) <$> IntMap.lookup v asn) pairs
+     in length xs == length pairs && IntSet.size (IntSet.fromList xs) == length xs
+  holds (LessEq a b) = case (IntMap.lookup a asn, IntMap.lookup b asn) of
+    (Just x, Just y) -> x <= y
+    _ -> False
+  holds (SumEq vs c) =
+    let xs = mapMaybe (`IntMap.lookup` asn) vs
+     in length xs == length vs && sum xs == c
 
 -- | A generated 4x4 puzzle, carried as its grid text so a failing case prints a readable grid.
 newtype Puzzle = Puzzle String
@@ -272,3 +293,108 @@ gridModel s = case parseGrid (T.pack s) of
 
 puzzleModel :: Puzzle -> Model
 puzzleModel (Puzzle s) = gridModel s
+
+{- | Graph coloring (ENCODE-02): the Petersen graph 3-colors, and CP agrees with the oracle on
+k-colorability for small random graphs.
+-}
+graph :: TestTree
+graph =
+  testGroup
+    "graph coloring"
+    [ testCase "the Petersen graph 3-colors" petersenColors
+    , testProperty "CP and the oracle agree on k-colorability" prop_graphColoring
+    ]
+
+petersenColors :: IO ()
+petersenColors = do
+  raw <- TIO.readFile "puzzles/graph/petersen.json"
+  case parseGraph raw of
+    Left e -> assertFailure ("graph parse failed: " <> e)
+    Right g -> case solve (graphModel g) of
+      NoSolution -> assertFailure "the Petersen graph is 3-colorable but CP found no coloring"
+      Solved a -> assertBool "the coloring violates an edge" (satisfies (graphModel g) a)
+
+prop_graphColoring :: Property
+prop_graphColoring = forAll genSmallGraph $ \g ->
+  let m = graphModel g
+   in (solve m /= NoSolution) === isJust (Brute.solveFirst m)
+
+-- | Small random graphs (2-5 vertices, 1-3 colors) for the differential k-colorability check.
+genSmallGraph :: Gen Graph
+genSmallGraph = do
+  n <- choose (2, 5)
+  k <- choose (1, 3)
+  edges <- sublistOf [(i, j) | i <- [0 .. n - 1], j <- [i + 1 .. n - 1]]
+  pure Graph {graphK = k, graphVertexCount = n, graphEdges = edges}
+
+{- | N-queens (ENCODE-03): the encoder's solution counts match the known sequence. Counting uses the
+oracle on the queens model, validating the encoding independently of the CP engine.
+-}
+queens :: TestTree
+queens =
+  testCase "N-queens solution counts match the known sequence" $ do
+    queenCount 4 @?= 2
+    queenCount 5 @?= 10
+    queenCount 6 @?= 4
+    queenCount 8 @?= 92
+ where
+  queenCount n = length (Brute.solveAll (queensModel n))
+
+{- | Ordering (ORDER-01/02/03): MRV with the degree tie-break and LCV measurably reduces the
+decisions the search makes on hard-17 versus naive in-order selection. Recorded counts (deterministic
+on this instance): naive makes 36400 decisions, MRV makes 1473 — about a 25x reduction. The assertion
+prints both counts on failure.
+-}
+ordering :: TestTree
+ordering =
+  testCase "MRV reduces decisions on hard-17 versus naive in-order selection" $ do
+    raw <- TIO.readFile "puzzles/sudoku/hard-17.txt"
+    case parseGrid raw of
+      Left e -> assertFailure ("parse failed: " <> show e)
+      Right g -> do
+        let m = toModel g
+            naiveD = snd (searchStats Naive (modelConstraints m) (modelDomains m))
+            mrvD = snd (searchStats Mrv (modelConstraints m) (modelDomains m))
+        assertBool
+          ("expected MRV < naive, got MRV=" <> show mrvD <> " naive=" <> show naiveD)
+          (mrvD < naiveD)
+
+{- | Sum and comparison propagators (CORE-06): on satisfiable-by-construction models that use 'SumEq'
+and 'LessEq', the engine returns a valid solution (soundness) and one fixpoint never prunes a real
+solution value (sound propagation).
+-}
+sumComparison :: TestTree
+sumComparison =
+  testGroup
+    "sum and comparison propagators"
+    [ testProperty "a returned solution is valid and SAT instances are not called unsolvable" prop_sumComp
+    , testProperty "sound propagation holds for sum and comparison" prop_sumCompSoundProp
+    ]
+
+prop_sumComp :: Property
+prop_sumComp = forAll genSumCompModel $ \m ->
+  case solve m of
+    Solved a -> counterexample "returned solution is invalid" (satisfies m a)
+    NoSolution -> counterexample "a satisfiable-by-construction model was called unsolvable" False
+
+prop_sumCompSoundProp :: Property
+prop_sumCompSoundProp = forAll genSumCompModel soundPropHolds
+
+{- | A satisfiable-by-construction CSP over 2-4 variables using a sum constraint and some comparison
+constraints: a witness assignment is drawn first, the sum target is its sum, and only comparisons the
+witness satisfies are added — so the witness is always a solution.
+-}
+genSumCompModel :: Gen Model
+genSumCompModel = do
+  n <- choose (2, 4)
+  hi <- choose (1, 4)
+  witness <- vectorOf n (choose (0, hi))
+  let vars = [0 .. n - 1]
+      vw = zip vars witness
+      domains = IntMap.fromList [(v, Domain (IntSet.fromList [0 .. hi])) | v <- vars]
+  comps <- sublistOf [(a, b) | (a, va) <- vw, (b, vb) <- vw, a /= b, va <= vb]
+  pure
+    Model
+      { modelDomains = domains
+      , modelConstraints = SumEq vars (sum witness) : [LessEq a b | (a, b) <- comps]
+      }
