@@ -54,12 +54,14 @@ library
                       Lattice.CP.Search
                       Lattice.CP.Solver
                       Lattice.Encode.Sudoku
+                      Lattice.Encode.Graph
                       Lattice.Brute
     build-depends:    base       >=4.21 && <4.22
                     , containers >=0.7  && <0.9
                     , vector     >=0.13 && <0.14
                     , primitive  >=0.9  && <0.10
                     , text       >=2.1  && <2.2
+                    , aeson      >=2.2  && <2.3
 
 -- Solve a puzzle in the terminal. This is the milestone-1 deliverable: it reads a puzzle
 -- file and prints the solution (or a sound "no solution") with no visualizer involved.
