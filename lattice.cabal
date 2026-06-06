@@ -65,6 +65,7 @@ library
                       Lattice.SAT.Trail
                       Lattice.SAT.Dimacs
                       Lattice.SAT.Watched
+                      Lattice.SAT.Analyze
     build-depends:    base       >=4.21 && <4.22
                     , containers >=0.7  && <0.9
                     , vector     >=0.13 && <0.14
