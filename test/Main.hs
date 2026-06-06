@@ -693,6 +693,13 @@ dimacsTests =
       assertLeft (parseDimacs "garbage\np cnf 1 1\n1 0\n")
   , testCase "rejects a var count above the sane ceiling" $
       assertLeft (parseDimacs "p cnf 100000000 1\n1 0\n")
+  , -- readMaybe @Int wraps on overflow (maxBound+1 -> minBound), so an abs-based bound was
+    -- bypassable: the signed range check now rejects an overflowing literal instead of indexing
+    -- a maxBound variable into the unboxed arrays and crashing the solver thread.
+    testCase "rejects a literal that overflows Int (wraps to minBound)" $
+      assertLeft (parseDimacs "p cnf 3 1\n9223372036854775808 0\n")
+  , testCase "rejects a literal that wraps around 2^64 to a small in-range value" $
+      assertLeft (parseDimacs "p cnf 10 1\n18446744073709551621 0\n")
   ]
 
 {- | Parse, print, re-parse: the re-parsed CNF must equal the originally parsed CNF. This proves the

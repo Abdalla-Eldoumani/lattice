@@ -85,9 +85,10 @@ boundedCount what tok = case readMaybe (T.unpack tok) of
   Nothing -> Left ("non-numeric " <> what <> " count: " <> T.unpack tok)
 
 {- | Read the @0@-terminated clauses from the flat token stream after the header. Each token is a
-'readMaybe'-bounded signed integer; @0@ closes the current clause; any other literal's magnitude must
-not exceed the declared variable count. A leftover non-empty clause at end of input (no trailing @0@)
-is rejected.
+'readMaybe'-bounded signed 'Integer' (not 'Int', which would WRAP on overflow and let an out-of-range
+or wrapped-into-range literal slip past the magnitude check); @0@ closes the current clause; any other
+literal's magnitude must not exceed the declared variable count. A leftover non-empty clause at end of
+input (no trailing @0@) is rejected.
 -}
 readClauses :: Int -> [Text] -> Either String [Clause]
 readClauses nVars toks0 = go [] toks0 []
@@ -97,6 +98,12 @@ readClauses nVars toks0 = go [] toks0 []
   go done [] [] = Right (reverse done)
   go _ [] (_ : _) = Left "the final clause is not terminated by 0"
   go done (tok : toks) cur = do
+    -- Read the literal as 'Integer', not 'Int': @readMaybe \@Int@ WRAPS on overflow (a token past
+    -- maxBound returns @Just minBound@, not 'Nothing'; a 2^64-sized token wraps modulo 2^64 to a
+    -- small in-range value), so an 'Int' parse both (a) admits a wrapped minBound the @abs@-based
+    -- bound let index a maxBound variable into the unboxed arrays — an uncaught crash — and (b)
+    -- silently corrupts the formula by accepting a wrapped literal as a different variable. 'Integer'
+    -- never wraps, so the magnitude check below sees the true value.
     n <- maybe (Left ("non-numeric literal: " <> T.unpack tok)) Right (readMaybe (T.unpack tok))
     if n == 0
       then go (reverse cur : done) toks []
@@ -104,10 +111,16 @@ readClauses nVars toks0 = go [] toks0 []
         lit <- toLit n
         go done toks (lit : cur)
 
+  -- A SIGNED range check on the true (un-wrapped) 'Integer' magnitude. After the guard the value is
+  -- within @[-nVars, nVars]@ and nVars <= dimacsCeiling, so @fromInteger@ and @abs@ cannot overflow.
   toLit n
-    | abs n > nVars =
-        Left ("literal magnitude " <> show (abs n) <> " exceeds the declared variable count")
-    | otherwise = Right (mkLit (abs n - 1) (n > 0))
+    | n < negate nVarsZ || n > nVarsZ =
+        Left ("literal magnitude " <> show n <> " exceeds the declared variable count")
+    | otherwise = Right (mkLit (fromInteger (abs n) - 1) (n > 0))
+
+  -- The declared variable count promoted to 'Integer' for the un-wrapped magnitude comparison.
+  nVarsZ :: Integer
+  nVarsZ = fromIntegral nVars
 
 -- | The canonical DIMACS text for a 'CNF': header, one clause per line, original literal order.
 printDimacs :: CNF -> Text
