@@ -2,8 +2,8 @@ cabal-version:      3.4
 name:               lattice
 version:            0.1.0.0
 synopsis:           A constraint and SAT solver that streams its reasoning to a live puzzle visualizer.
-description:        Finite-domain constraint propagation (and, in later milestones, a CDCL SAT engine)
-                    with an instrumented event stream a web front end animates step by step.
+description:        Finite-domain constraint propagation and a CDCL SAT engine, with an instrumented
+                    event stream a web front end animates step by step.
 license:            MIT
 license-file:       LICENSE
 author:             Abdalla Eldoumani
