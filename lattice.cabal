@@ -56,6 +56,7 @@ library
                       Lattice.Encode.Sudoku
                       Lattice.Encode.Graph
                       Lattice.Encode.Queens
+                      Lattice.Encode.Nonogram
                       Lattice.Event
                       Lattice.Protocol
                       Lattice.Brute
