@@ -8,10 +8,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   parseEvent,
   PROTOCOL_VERSION,
+  type PuzzleKind,
   SOLVER_WS_URL,
   type SolverControl,
 } from "./protocol";
-import { applyEvent, initialState, type Counters, type Grid, type ReplayState } from "./replay";
+import {
+  applyEvent,
+  initialState,
+  initialStateForKind,
+  type Counters,
+  type Grid,
+  type ReplayState,
+} from "./replay";
+import { applyMinimapEvent, initialMinimap, type MinimapState } from "./minimap";
 
 export type { Cell, Counters, Grid } from "./replay";
 
@@ -24,8 +33,10 @@ export interface SolverState {
   currentDecision: ReplayState["currentDecision"];
   lastReason: string;
   solved: boolean;
+  // the search-tree the minimap draws, built by the parallel reducer from the same event stream.
+  minimap: MinimapState;
   conn: ConnState;
-  start: (puzzle: string) => void;
+  start: (puzzle: string, kind: PuzzleKind) => void;
   step: () => void;
   play: (speed: number) => void;
   pause: () => void;
@@ -34,13 +45,19 @@ export interface SolverState {
 
 export function useSolver(): SolverState {
   const [view, setView] = useState<ReplayState>(() => initialState(""));
+  const [minimap, setMinimap] = useState<MinimapState>(() => initialMinimap());
   const [conn, setConn] = useState<ConnState>("connecting");
 
   const ws = useRef<WebSocket | null>(null);
   const stateRef = useRef<ReplayState>(view);
+  const minimapRef = useRef<MinimapState>(minimap);
   const puzzleRef = useRef<string>("");
+  const kindRef = useRef<PuzzleKind>("sudoku");
 
-  const sync = useCallback(() => setView({ ...stateRef.current }), []);
+  const sync = useCallback(() => {
+    setView({ ...stateRef.current });
+    setMinimap(minimapRef.current);
+  }, []);
 
   const send = useCallback((msg: SolverControl) => {
     const s = ws.current;
@@ -57,7 +74,10 @@ export function useSolver(): SolverState {
     socket.onmessage = (e) => {
       const ev = parseEvent(typeof e.data === "string" ? e.data : "");
       if (ev) {
+        // apply the same event to both reducers: the cell-state model the grid renders and the
+        // search-tree the minimap renders. Both stay in lockstep with one event stream.
         stateRef.current = applyEvent(stateRef.current, ev);
+        minimapRef.current = applyMinimapEvent(minimapRef.current, ev);
         sync();
       }
     };
@@ -65,11 +85,13 @@ export function useSolver(): SolverState {
   }, [sync]);
 
   const start = useCallback(
-    (puzzle: string) => {
+    (puzzle: string, kind: PuzzleKind) => {
       puzzleRef.current = puzzle;
-      stateRef.current = initialState(puzzle);
+      kindRef.current = kind;
+      stateRef.current = initialStateForKind(kind, puzzle);
+      minimapRef.current = initialMinimap();
       sync();
-      send({ v: PROTOCOL_VERSION, t: "start", puzzle, mode: "trace" });
+      send({ v: PROTOCOL_VERSION, t: "start", kind, puzzle, mode: "trace" });
     },
     [send, sync],
   );
@@ -81,7 +103,8 @@ export function useSolver(): SolverState {
   );
   const pause = useCallback(() => send({ v: PROTOCOL_VERSION, t: "pause" }), [send]);
   const restart = useCallback(() => {
-    stateRef.current = initialState(puzzleRef.current);
+    stateRef.current = initialStateForKind(kindRef.current, puzzleRef.current);
+    minimapRef.current = initialMinimap();
     sync();
     send({ v: PROTOCOL_VERSION, t: "restart" });
   }, [send, sync]);
@@ -94,6 +117,7 @@ export function useSolver(): SolverState {
       currentDecision: view.currentDecision,
       lastReason: view.lastReason,
       solved: view.solved,
+      minimap,
       conn,
       start,
       step,
@@ -101,6 +125,6 @@ export function useSolver(): SolverState {
       pause,
       restart,
     }),
-    [view, conn, start, step, play, pause, restart],
+    [view, minimap, conn, start, step, play, pause, restart],
   );
 }
