@@ -1,14 +1,21 @@
 {- | The brute-force reference solver: a plain backtracking enumerator used only by the tests. It
-imports no CP engine module on purpose — its independence from the propagator, queue, and search is
-exactly what makes the differential test meaningful. The only concession to tractability is
-most-constrained-variable ordering (pick the unassigned cell with the fewest still-consistent values
-next). That is ordering ONLY: it enumerates the identical set of solutions, shares no inference with
-the CP engine, and keeps the consistency check trivially correct — so the oracle stays "too simple to
-be wrong" while still finishing a 9x9 and N=8 queens quickly.
+imports no CP or SAT engine module on purpose — its independence from the propagator, queue, search,
+and the CDCL loop is exactly what makes the differential tests meaningful. The only concession to
+tractability is most-constrained-variable ordering (pick the unassigned cell with the fewest
+still-consistent values next). That is ordering ONLY: it enumerates the identical set of solutions,
+shares no inference with the CP engine, and keeps the consistency check trivially correct — so the
+oracle stays "too simple to be wrong" while still finishing a 9x9 and N=8 queens quickly.
+
+The CNF oracle ('satisfiableCNF' / 'solveAllCNF') is the same posture for SAT: a plain @2^n@
+truth-table enumerator over the variable count, checking every clause directly. It imports only the
+pure 'Lattice.SAT.Types' data type — no SAT engine module — so it shares no inference with the CDCL
+solver and is a sound independent reference for the three-way differential.
 -}
 module Lattice.Brute (
   solveFirst,
   solveAll,
+  satisfiableCNF,
+  solveAllCNF,
 ) where
 
 import Data.IntMap.Strict qualified as IntMap
@@ -17,6 +24,7 @@ import Data.List (group, minimumBy)
 import Data.Maybe (mapMaybe)
 import Data.Ord (comparing)
 import Lattice.Core.Types (Assignment, Constraint (..), Domain (..), Model (..), Value, Var)
+import Lattice.SAT.Types (CNF (..), litPos, litVar)
 
 {- | The first satisfying assignment, or 'Nothing' if the model is unsatisfiable. Lazy: it forces
 only the head of 'solveAll', so a satisfiable instance stops at the first solution.
@@ -85,3 +93,28 @@ assignment, independent of the propagator, so the differential check stays meani
 -}
 runs :: [Value] -> [Int]
 runs line = [length g | g@(b : _) <- group line, b == 1]
+
+{- | Is the CNF satisfiable? The exhaustive @2^n@ oracle: enumerate every truth assignment over the
+declared variables and return 'True' iff some assignment satisfies every clause. Too simple to be
+wrong, and independent of the SAT engine, which is the whole point.
+-}
+satisfiableCNF :: CNF -> Bool
+satisfiableCNF cnf = not (null (solveAllCNF cnf))
+
+{- | Every satisfying truth assignment of the CNF, each a list of polarities indexed by variable
+(@0 .. cnfVars - 1@). Enumerates all @2^n@ assignments and keeps those where every clause has at
+least one true literal. Tiny instances only — that is what the oracle is for.
+-}
+solveAllCNF :: CNF -> [[Bool]]
+solveAllCNF cnf = filter sat (allAssignments (cnfVars cnf))
+ where
+  sat asn = all (clauseSat asn) (cnfClauses cnf)
+  -- A clause holds when some literal agrees with the assignment: a positive literal on a true var,
+  -- or a negative literal on a false var.
+  clauseSat asn = any (\lit -> (asn !! litVar lit) == litPos lit)
+
+-- | Every boolean assignment over @n@ variables (@2^n@ of them), as polarity lists indexed by var.
+allAssignments :: Int -> [[Bool]]
+allAssignments n
+  | n <= 0 = [[]]
+  | otherwise = [b : rest | b <- [False, True], rest <- allAssignments (n - 1)]
