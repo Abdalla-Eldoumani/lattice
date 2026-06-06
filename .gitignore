@@ -1,0 +1,35 @@
+# Haskell / cabal
+dist-newstyle/
+dist/
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
+.ghc.environment.*
+cabal.project.local
+cabal.project.local~
+# NOTE: cabal.project.freeze is committed on purpose. It locks the dependency closure.
+
+# HLS / editor
+.hie/
+*.hiedb
+.vscode/
+.idea/
+*.swp
+
+# Next.js / Node (web/)
+web/node_modules/
+web/.next/
+web/out/
+web/build/
+web/.turbo/
+web/next-env.d.ts
+web/*.tsbuildinfo
+npm-debug.log*
+
+# Playwright screenshots are kept across sessions for comparison, but its caches are not.
+.playwright-mcp/cache/
+
+# OS
+.DS_Store
+Thumbs.db
