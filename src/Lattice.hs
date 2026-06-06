@@ -19,6 +19,15 @@ module Lattice (
   parseNonogram,
   nonogramModel,
   decodeNonogram,
+  CNF (..),
+  Lit (..),
+  SatResult (..),
+  parseDimacs,
+  printDimacs,
+  solveSat,
+  solveSatTrace,
+  graphCNF,
+  cnfColoring,
 ) where
 
 import Lattice.CP.Solver (solve)
@@ -27,6 +36,10 @@ import Lattice.Encode.Graph (Graph (..), graphModel, parseGraph)
 import Lattice.Encode.Nonogram (Nonogram (..), decodeNonogram, nonogramModel, parseNonogram)
 import Lattice.Encode.Queens (queensModel)
 import Lattice.Encode.Sudoku (ParseError (..), decode, parseGrid, toModel)
+import Lattice.SAT.Dimacs (parseDimacs, printDimacs)
+import Lattice.SAT.Encode (cnfColoring, graphCNF)
+import Lattice.SAT.Solver (solveSat, solveSatTrace)
+import Lattice.SAT.Types (CNF (..), Lit (..), SatResult (..))
 
 -- | Library version, surfaced by the CLI and (later) the server banner.
 version :: String
