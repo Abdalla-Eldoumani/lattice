@@ -67,6 +67,7 @@ library
                       Lattice.SAT.Watched
                       Lattice.SAT.Analyze
                       Lattice.SAT.VSIDS
+                      Lattice.SAT.Solver
                       Lattice.SAT.Encode
     build-depends:    base       >=4.21 && <4.22
                     , containers >=0.7  && <0.9
