@@ -1,0 +1,18 @@
+# fourmolu config. Formatting is enforced in CI (`fourmolu --mode check`). Normalize the
+# tree with `fourmolu --mode inplace $(git ls-files '*.hs')` before committing.
+indentation: 2
+column-limit: 100
+function-arrows: leading
+comma-style: leading
+import-export-style: diff-friendly
+indent-wheres: false
+record-brace-space: true
+newlines-between-decls: 1
+haddock-style: multi-line
+let-style: auto
+in-style: right-align
+single-constraint-parens: auto
+single-deriving-parens: auto
+unicode: never
+respectful: true
+fixities: []
