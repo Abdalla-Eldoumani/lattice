@@ -64,14 +64,24 @@ export function cloneGrid(grid: Grid): Grid {
   }));
 }
 
+// The hard cap on how far `growGridTo` will extend a SAT trail. It matches the `dimacsVarCount`
+// CEILING (the largest variable count the dimacs seed will allocate), so a legitimate solve — whose
+// cells never exceed the seeded size — is never clamped, while a hostile or garbled event with a huge
+// `cell` (e.g. 2_000_000_000) cannot push ~2 billion cells and OOM the tab.
+const MAX_TRAIL_CELLS = 2000;
+
 // Grow a SAT trail grid in place so index `cell` is addressable, pushing `open` cells up to it
 // (IN-04). The dimacs seed sizes the trail from the `p cnf N M` header (a bound, sometimes a guess
 // for a race's client-side CNF), so a high-id variable's event can reference a cell past the seed; an
 // un-grown grid drops it silently (`grid[ev.cell]` is undefined). Growing on demand means the trail
 // view never loses a high-variable assignment. CP grids are pre-sized by their geometry and never
-// call this. Returns the same array (mutated) for chaining.
+// call this. The grow is capped at `MAX_TRAIL_CELLS`: a `cell` past the cap grows only up to it, so
+// the out-of-bounds event is bounded-dropped (`grid[cell]` stays undefined and the apply arm's
+// `if (cell)` guard skips it) rather than allocating without limit. Returns the same array (mutated)
+// for chaining.
 function growGridTo(grid: Grid, cell: number): Grid {
-  for (let i = grid.length; i <= cell; i++) {
+  const target = Math.min(cell, MAX_TRAIL_CELLS);
+  for (let i = grid.length; i <= target; i++) {
     grid.push({ value: null, candidates: [], status: "open" });
   }
   return grid;

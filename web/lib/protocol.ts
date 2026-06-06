@@ -162,11 +162,29 @@ export type SolverControl =
   | PauseControl
   | RestartControl;
 
-// Validate the version on receipt so a protocol bump fails loudly rather than rendering garbage.
+// The known server-to-client event tags, mirroring the `SolverEvent` union and the Haskell
+// `Lattice.Event` ADT. `parseEvent` narrows an incoming `t` against this set so an unknown tag is
+// rejected, matching the engine's `fail "unknown event tag"` strictness on its side of the wire.
+const EVENT_TAGS = new Set<string>([
+  "decision",
+  "propagate",
+  "conflict",
+  "backtrack",
+  "learn",
+  "restart",
+  "solution",
+  "unsat",
+  "stats",
+]);
+
+// Validate the version AND the tag on receipt so a protocol bump or a garbled/hostile frame fails
+// loudly (returns null) rather than rendering garbage. Total: never throws on malformed JSON or a
+// non-object payload.
 export function parseEvent(raw: string): SolverEvent | null {
   try {
     const msg = JSON.parse(raw) as SolverEvent;
     if (msg.v !== PROTOCOL_VERSION) return null;
+    if (!EVENT_TAGS.has(msg.t)) return null;
     return msg;
   } catch {
     return null;
