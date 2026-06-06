@@ -52,6 +52,7 @@ library
                       Lattice.CP.Propagator
                       Lattice.CP.Queue
                       Lattice.CP.Search
+                      Lattice.CP.Solver
                       Lattice.Encode.Sudoku
     build-depends:    base       >=4.21 && <4.22
                     , containers >=0.7  && <0.9
