@@ -57,6 +57,7 @@ library
                       Lattice.Encode.Graph
                       Lattice.Encode.Queens
                       Lattice.Event
+                      Lattice.Protocol
                       Lattice.Brute
     build-depends:    base       >=4.21 && <4.22
                     , containers >=0.7  && <0.9
