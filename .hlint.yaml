@@ -1,0 +1,18 @@
+# HLint config. CI runs `hlint .` and fails on any hint. Keep this near-default; the
+# point is to catch real mistakes, not to argue with the linter. Add an ignore only with
+# a one-line reason so the next person knows why the rule was waived.
+
+# The hot loops use explicit recursion and local mutable state on purpose. HLint's
+# "use fold" / "use map" suggestions there hurt readability and sometimes defeat the
+# strictness we want, so they are silenced inside the solver core only. Everywhere else
+# the hints stand.
+- ignore: { name: "Use foldr", within: [Lattice.CP.Queue, Lattice.CP.Search, Lattice.SAT.Trail, Lattice.SAT.Watched] }
+- ignore: { name: "Use map", within: [Lattice.CP.Queue, Lattice.CP.Search, Lattice.SAT.Trail, Lattice.SAT.Watched] }
+- ignore: { name: "Redundant lambda", within: [Lattice.CP.Solver, Lattice.SAT.Solver] }
+
+# Test code asserts exact shapes and sometimes repeats itself for clarity. Let it.
+- ignore: { name: "Reduce duplication", within: [Main] }
+
+# These are good hints; keep them loud everywhere.
+- warn: { name: "Use newtype instead of data" }
+- warn: { name: "Use camelCase" }
