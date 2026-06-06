@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "comment": "Exact-pinned. No carets, no tildes. The downstream agent installs exactly what was researched and verified against the npm registry on 2026-06-03. Bump deliberately, never incidentally; if a version fails to resolve, stop and report. This app is a milestone-3 component: do not run npm install here until the CP core and CLI are green.",
+  "comment": "Exact-pinned. No carets, no tildes. The downstream agent installs exactly what was researched and verified against the npm registry on 2026-06-03. Bump deliberately, never incidentally; if a version fails to resolve, stop and report. This app is a milestone-3 component: do not run npm install here until the CP core and CLI are green. The overrides pin Next's transitive postcss to the patched 8.5.15 (GHSA-qx2v-qp2m-jg93); not exploitable here since postcss only processes our own build-time CSS, but it keeps the dependency audit clean.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -28,5 +28,8 @@
     "tailwindcss": "4.3.0",
     "tsx": "4.22.4",
     "typescript": "6.0.3"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
   }
 }
