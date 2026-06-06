@@ -1,13 +1,13 @@
-{- | The Sudoku encoder: parse a dot-for-blank, row-per-line grid into a constraint model,
-and decode a solved assignment back to a digit string. It handles 9x9 (3x3 boxes) and 4x4
-(2x2 boxes) because the puzzle generators emit both; the box side is the integer square
-root of the side length. This is the only external-input boundary in Phase 1, so
-'parseGrid' is total and surfaces every malformed input as a 'ParseError' rather than a crash.
+{- | The Sudoku encoder: parse a dot-for-blank, row-per-line grid into a constraint model, and decode
+a solved assignment back to a digit string. It handles 9x9 (3x3 boxes) and 4x4 (2x2 boxes) because
+the puzzle generators emit both; the box side is the integer square root of the side length. This is
+the only external-input boundary in Phase 1, so 'parseGrid' is total and surfaces every malformed
+input as a 'ParseError' rather than a crash. The 'Grid' (not the puzzle-agnostic 'Model') carries the
+side length, so 'decode' takes the grid.
 -}
 module Lattice.Encode.Sudoku (
   ParseError (..),
   Grid,
-  Model (..),
   parseGrid,
   toModel,
   decode,
@@ -18,12 +18,12 @@ import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
 import Data.Text (Text)
 import Data.Text qualified as T
-import Lattice.Core.Types (Assignment, Constraint (..), Domain (..), Domains, Value)
+import Lattice.Core.Types (Assignment, Constraint (..), Domain (..), Model (..), Value)
 
-{- | Why a grid failed to parse. Each constructor carries the location detail needed to point
-a user at the offending line or column. A contradictory-but-well-formed grid is deliberately
-NOT an error here: it parses, and the solver later reports it unsolvable (parse error means a
-non-zero exit; unsolvable is a clean exit).
+{- | Why a grid failed to parse. Each constructor carries the location detail needed to point a user
+at the offending line or column. A contradictory-but-well-formed grid is deliberately NOT an error
+here: it parses, and the solver later reports it unsolvable (parse error means a non-zero exit;
+unsolvable is a clean exit).
 -}
 data ParseError
   = EmptyInput
@@ -37,20 +37,9 @@ data ParseError
 data Grid = Grid Int [Maybe Value]
   deriving (Eq, Show)
 
-{- | A model ready for the solver: the side length (kept so 'decode' knows the width), the
-seeded domains (blanks -> {1..n}, givens -> {d}), and the row/column/box all-different
-constraints.
--}
-data Model = Model
-  { modelSize :: Int
-  , modelDomains :: Domains
-  , modelConstraints :: [Constraint]
-  }
-  deriving (Eq, Show)
-
-{- | Parse a dot-for-blank, row-per-line grid. The side length is inferred from the line count
-and must be a perfect square; '.' and '0' are blanks, '1'..'n' are givens. A wrong line
-length, an unexpected character, or an out-of-range digit is a 'ParseError'.
+{- | Parse a dot-for-blank, row-per-line grid. The side length is inferred from the line count and
+must be a perfect square; '.' and '0' are blanks, '1'..'n' are givens. A wrong line length, an
+unexpected character, or an out-of-range digit is a 'ParseError'.
 -}
 parseGrid :: Text -> Either ParseError Grid
 parseGrid input =
@@ -77,14 +66,13 @@ parseGrid input =
          in if d <= n then Right (Just d) else Left (DigitOutOfRange r c d n)
     | otherwise = Left (BadChar r c ch)
 
-{- | Build the constraint model from a parsed grid: seed each cell's domain and emit an
-all-different over every row, column, and box.
+{- | Build the constraint model from a parsed grid: seed each cell's domain and emit an all-different
+over every row, column, and box.
 -}
 toModel :: Grid -> Model
 toModel (Grid n cells) =
   Model
-    { modelSize = n
-    , modelDomains = IntMap.fromList (zipWith seed [0 ..] cells)
+    { modelDomains = IntMap.fromList (zipWith seed [0 ..] cells)
     , modelConstraints = rowCons ++ colCons ++ boxCons
     }
  where
@@ -102,11 +90,9 @@ toModel (Grid n cells) =
 {- | Render a full assignment as the n*n row-major digit string. A variable missing from the
 assignment (not expected for a complete solution) renders as '.', keeping this total.
 -}
-decode :: Model -> Assignment -> Text
-decode model asn =
+decode :: Grid -> Assignment -> Text
+decode (Grid n _) asn =
   T.pack [maybe '.' intToDigit (IntMap.lookup i asn) | i <- [0 .. n * n - 1]]
- where
-  n = modelSize model
 
 -- | Integer square root, exact for perfect squares (recovers the box side from the width).
 isqrt :: Int -> Int

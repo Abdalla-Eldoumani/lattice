@@ -8,8 +8,7 @@ module Lattice.CP.Solver (
 ) where
 
 import Lattice.CP.Search (search)
-import Lattice.Core.Types (Result (..))
-import Lattice.Encode.Sudoku (Model (..))
+import Lattice.Core.Types (Model (..), Result (..))
 
 -- | Solve a model: 'Solved' with an assignment, or a sound 'NoSolution'.
 solve :: Model -> Result

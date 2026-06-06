@@ -39,5 +39,5 @@ solveFile path = do
       Right grid ->
         let model = toModel grid
          in case solve model of
-              Solved a -> TIO.putStrLn (decode model a) >> exitSuccess
+              Solved a -> TIO.putStrLn (decode grid a) >> exitSuccess
               NoSolution -> putStrLn "no solution" >> exitSuccess
