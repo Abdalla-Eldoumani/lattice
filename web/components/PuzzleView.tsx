@@ -1,6 +1,6 @@
 "use client";
 
-// The puzzle-view dispatcher (VIZ-04): one component that switches on the puzzle `kind` and renders
+// The puzzle-view dispatcher: one component that switches on the puzzle `kind` and renders
 // the matching per-puzzle view from the shared `useSolver` cell-state model. Sudoku is the existing
 // grid, moved here unchanged; graph, queens, and nonogram each have their dedicated renderer. The
 // dispatcher is exhaustive over `PuzzleKind` so a new kind is a compile error until wired.
