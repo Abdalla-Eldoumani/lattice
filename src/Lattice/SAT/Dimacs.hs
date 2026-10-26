@@ -2,8 +2,7 @@
 This is an untrusted-input boundary, so 'parseDimacs' is a total @Either String CNF@ in the same
 posture as 'Lattice.Encode.Graph.parseGraph' — every numeric parse is 'readMaybe'-bounded (no partial
 parse, no unsafe first-element or index access), and a malformed instance is a 'Left', never a crash
-or a silently wrong formula. The Phase 4 review flagged exactly the partial-function-on-untrusted-
-input bug class this guards against.
+or a silently wrong formula.
 
 DIMACS is 1-based and signed; the engine is 0-based and MiniSat-encoded. The mapping
 @dimacsVar v -> 2*(v-1) + sign@ happens here at the boundary only; the engine never sees DIMACS
