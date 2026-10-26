@@ -2,7 +2,7 @@
   "name": "hard",
   "kind": "graph-coloring",
   "k": 4,
-  "note": "A dense 10-vertex 4-chromatic graph (uncolorable at k=3, so k=4 is genuinely required). Under MRV/LCV the search makes a wrong early choice and recovers: 7 decisions, 3 backtracks at k=4, the visible struggle-and-recover VIZ-07 wants. Verified by the engine before commit. Layout is a fixed circle in a 400x400 viewport so the coloring view never re-lays-out and never jitters (VIZ-06). The named Grotzsch graph was tried first but colors greedily (0 backtracks) under this engine's LCV value ordering, so a verified-backtracking instance ships instead (RESEARCH A2 authorizes the swap).",
+  "note": "A dense 10-vertex 4-chromatic graph (uncolorable at k=3, so k=4 is genuinely required). Under MRV/LCV the search makes a wrong early choice and recovers: 7 decisions, 3 backtracks at k=4, a visible struggle and recovery. Verified by the engine before commit. Layout is a fixed circle in a 400x400 viewport so the coloring view never re-lays-out and never jitters. The named Grotzsch graph was tried first but colors greedily (0 backtracks) under this engine's LCV value ordering, so a verified-backtracking instance ships instead.",
   "vertices": [
     { "id": 0, "x": 200.0, "y": 40.0 },
     { "id": 1, "x": 294.0, "y": 70.6 },
