@@ -1,8 +1,8 @@
 {-# LANGUAGE TupleSections #-}
 
-{- | The pruning core. CORE-02 ships the value-elimination all-different and the binary not-equal;
-CORE-06 adds the sum and comparison (bounds) propagators; Phase 2 also adds offset-all-different for
-the three-line N-queens encoding. A propagator runs one pass over the domains and reports which
+{- | The pruning core: the value-elimination all-different, the binary not-equal, the sum and
+comparison (bounds) propagators, and offset-all-different for the three-line N-queens encoding.
+A propagator runs one pass over the domains and reports which
 variables shrank (so the queue re-enqueues exactly their watchers) and whether any domain emptied (a
 conflict). Soundness lives here: every removal is justified by the constraint, so no value belonging
 to a real solution is ever removed — the sound-propagation property test mechanizes this for each.
