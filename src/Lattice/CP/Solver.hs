@@ -1,4 +1,4 @@
-{- | The CP entry point in both modes (CORE-05, EVENT-01). 'solve' is fast mode: propagate the
+{- | The CP entry point in both modes. 'solve' is fast mode: propagate the
 seeded givens to a fixpoint and search, with no events. 'solveTrace' is the same engine threaded
 with an 'Emit' callback, so a caller (the trace server) receives the decision/propagate/conflict/
 backtrack/solution stream. A contradictory givens set fails the initial fixpoint and yields
