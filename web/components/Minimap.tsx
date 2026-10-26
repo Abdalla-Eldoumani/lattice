@@ -1,9 +1,9 @@
 "use client";
 
-// The search-tree minimap (VIZ-05): a compact SVG panel that draws the bounded node set the
+// The search-tree minimap: a compact SVG panel that draws the bounded node set the
 // minimap reducer produces. One dot per decision, laid out by depth (x) and visible order (y);
 // colored by node state (current/path accent, dead end conflict-red, solution path green); a ring
-// on the current node is the non-color second signal (VIZ-08). Older/deeper nodes collapse into a
+// on the current node is the non-color second signal. Older/deeper nodes collapse into a
 // "+N nodes" count so a hard solve with thousands of nodes stays a glance, not a diagram.
 //
 // The one JS-driven animation in the app lives here: a freshly added node grows its radius from 0.
@@ -137,7 +137,7 @@ export function Minimap({ minimap }: { minimap: MinimapState }) {
             return (
               <g key={p.node.id}>
                 {isCurrent && (
-                  // the ring on the current node: the non-color second signal (VIZ-08).
+                  // the ring on the current node: the non-color second signal.
                   <circle
                     cx={p.x}
                     cy={p.y}
