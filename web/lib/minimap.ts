@@ -1,4 +1,4 @@
-// The pure search-tree reducer (VIZ-05). It turns the engine's decision/backtrack/solution stream
+// The pure search-tree reducer. It turns the engine's decision/backtrack/solution stream
 // into a compact tree the minimap draws: one node per decision at its level, the current search path
 // marked, the abandoned subtree dimmed on backtrack, the path marked solved on solution. Kept free of
 // React (like replay.ts) so it is unit-testable and the SVG panel is a thin consumer. The reducer is
@@ -7,7 +7,7 @@
 
 import type { SolverEvent } from "./protocol";
 
-// A node's lifecycle state, which the panel maps to a color + the current-node ring (VIZ-08). `open`
+// A node's lifecycle state, which the panel maps to a color + the current-node ring. `open`
 // is a node that was on the path but is neither current nor yet resolved as a dead end or solved.
 export type MinimapNodeState = "current" | "path" | "deadEnd" | "solved" | "open";
 
@@ -37,8 +37,8 @@ export interface MinimapState {
 }
 
 // The render window: the current path plus this many most-recent nodes stay visible; the rest collapse
-// into collapsedCount. A tunable constant per RESEARCH Open Question 3 (the "current path + last ~20-30
-// nodes" policy) — small enough that a hard solve with thousands of nodes renders a bounded SVG, large
+// into collapsedCount. A tunable constant (the "current path + last ~20-30
+// nodes" policy), small enough that a hard solve with thousands of nodes renders a bounded SVG, large
 // enough that recent siblings around the current frontier stay legible. Bump it if the panel grows.
 export const RECENT_WINDOW = 24;
 
