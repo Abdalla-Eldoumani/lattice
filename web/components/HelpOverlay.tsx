@@ -1,6 +1,6 @@
 "use client";
 
-// The keyboard-shortcut help overlay (VIZ-08). A modal dialog listing every shortcut the page binds,
+// The keyboard-shortcut help overlay. A modal dialog listing every shortcut the page binds,
 // opened by the "?" button or the `?`/`h` key and dismissed by ESC or the close button. It is an
 // accessible dialog: role="dialog" + aria-modal, an aria-label, focus moves into the panel on open and
 // returns to the trigger on close, focus is trapped while open, and ESC closes. Styled with the locked
