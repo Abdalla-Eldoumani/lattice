@@ -1,7 +1,7 @@
 {- | The Sudoku encoder: parse a dot-for-blank, row-per-line grid into a constraint model, and decode
 a solved assignment back to a digit string. It handles 9x9 (3x3 boxes) and 4x4 (2x2 boxes) because
-the puzzle generators emit both; the box side is the integer square root of the side length. This is
-the only external-input boundary in Phase 1, so 'parseGrid' is total and surfaces every malformed
+the puzzle generators emit both; the box side is the integer square root of the side length. The grid
+text is external input, so 'parseGrid' is total and surfaces every malformed
 input as a 'ParseError' rather than a crash. The 'Grid' (not the puzzle-agnostic 'Model') carries the
 side length, so 'decode' takes the grid.
 -}
