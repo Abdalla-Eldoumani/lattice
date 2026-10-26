@@ -4,8 +4,8 @@
 {- | The CDCL solver entry points, mirroring the CP 'Lattice.CP.Solver' two-mode shape one-to-one.
 'solveSat' is fast mode: 'runST' with the no-op emit, which @-O@ specializes-and-deletes so the loop is
 a tight allocation-free 'ST' loop over the mutable spine. 'cdclLoop' is the loop generic over
-'PrimMonad', threading an 'Emit' callback, marked @INLINEABLE@ so GHC specializes the emit per mode — the
-EVENT-02 precedent re-applied to SAT. The fast-mode emit must vanish; the @-ddump-simpl@ acceptance check
+'PrimMonad', threading an 'Emit' callback, marked @INLINEABLE@ so GHC specializes the emit per mode, as
+the CP engine does. The fast-mode emit must vanish; the @-ddump-simpl@ acceptance check
 confirms no 'Lattice.Event' constructor survives in the fast path.
 
 This is real CDCL: decide a variable at a fresh level (saved phase first), propagate via watched-literal
@@ -134,7 +134,7 @@ solveSatLearnedAtLevels cnf = runST $ do
 {- | Strict in-place modify for the collector 'MutVar' (the test-only learned-clause sink). The new
 value is forced with @($!)@ before it is stored, so the collector holds a proper @(c : cs)@ cons cell
 rather than an unevaluated @(c :)@ thunk chain that would only be forced at @readMutVar acc@ at the end
-of a long solve (a space leak, the lazy-value-forced-late class Phase 4 flagged). Equivalent to
+of a long solve (a space leak: a lazy value forced late). Equivalent to
 @Data.Primitive.MutVar.modifyMutVar'@, written out to keep the import surface unchanged.
 -}
 modifyMutVar :: (PrimMonad m) => MutVar (PrimState m) a -> (a -> a) -> m ()
@@ -251,16 +251,16 @@ cdclLoop emit learn st vs = do
 
   -- Non-chronological unwind to the backjump level and re-sync the loop bookkeeping: drop everything
   -- above @bj@, reset the decision level, and clamp the propagation queue head to the (shorter) trail.
-  -- This is the non-chronological backjump that replaced the plan-02 chronological backtrack; a Luby
+  -- This is a non-chronological backjump, not a chronological backtrack; a Luby
   -- restart reuses it with @bj = 0@ (the restart keeps the clause DB and activities — it never rebuilds
   -- them; only the trail assignment is erased).
   --
-  -- CONVENTION NOTE (WR-01): 'Lattice.SAT.Trail.unwindTo' drops level @bj@ ITSELF (truncating to where
+  -- CONVENTION NOTE: 'Lattice.SAT.Trail.unwindTo' drops level @bj@ ITSELF (truncating to where
   -- @bj@ opened), diverging from MiniSat @cancelUntil@, which keeps @bj@. So the @enqueueLit asserting@
   -- below puts the asserting literal at @bj@ as the only literal there and the learned clause is NOT
   -- unit in the MiniSat sense (its second-highest literal, at @bj@, is un-assigned by this unwind).
   -- That is sound: the assert still advances the search and every learned clause stays implied — locked
-  -- by the @sat/analyze@ "WR-01 lock" and implied-clause properties. See the 'unwindTo' header.
+  -- by the @sat/analyze@ "post-backjump assert is sound" and implied-clause properties. See the 'unwindTo' header.
   backjumpTo bj = do
     unwindTo (ssTrail st) bj
     writeMutVar (ssLevel st) bj
