@@ -122,7 +122,7 @@ or a backjump to the root) discards every DECISION level but KEEPS the level-0 r
 input unit-clause propagations — which are permanently fixed and never re-derived. The trail is the
 only place these resets happen.
 
-CONVENTION DIVERGENCE FROM MiniSat (deliberate, see WR-01). @unwindTo lvl@ truncates to
+CONVENTION DIVERGENCE FROM MiniSat (deliberate). @unwindTo lvl@ truncates to
 @tLevels[lvl-1]@ — the trail length when level @lvl@ /opened/ — so it removes level @lvl@ ITSELF along
 with everything above. MiniSat @cancelUntil(lvl)@ instead KEEPS level @lvl@ and removes only levels
 @> lvl@. The practical consequence on a backjump to @bj@: the learned clause's highest /other/ literal
@@ -130,7 +130,7 @@ with everything above. MiniSat @cancelUntil(lvl)@ instead KEEPS level @lvl@ and 
 clause is NOT unit in the MiniSat sense when the asserting literal is then enqueued. This is sound, not
 a bug: the asserting literal is still forced true (the search advances) and no other literal spuriously
 satisfies the clause, and every clause the solver learns stays implied by the formula. Both facts are
-locked by tests — the @sat/analyze@ "WR-01 lock" property (the post-backjump assert is sound) and the
+locked by tests — the @sat/analyze@ "post-backjump assert is sound" property and the
 already-green implied-clause property (@formula AND not-clause@ UNSAT) at a high budget. Do NOT change
 this to keep level @bj@ on the static "clause should be unit" concern alone; it is a working,
 differentially-green invariant, and the level-0 special case below is the acef277 root-unit fix.
