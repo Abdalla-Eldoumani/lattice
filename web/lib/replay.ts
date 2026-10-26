@@ -71,7 +71,7 @@ export function cloneGrid(grid: Grid): Grid {
 const MAX_TRAIL_CELLS = 2000;
 
 // Grow a SAT trail grid in place so index `cell` is addressable, pushing `open` cells up to it
-// (IN-04). The dimacs seed sizes the trail from the `p cnf N M` header (a bound, sometimes a guess
+// as events arrive. The dimacs seed sizes the trail from the `p cnf N M` header (a bound, sometimes a guess
 // for a race's client-side CNF), so a high-id variable's event can reference a cell past the seed; an
 // un-grown grid drops it silently (`grid[ev.cell]` is undefined). Growing on demand means the trail
 // view never loses a high-variable assignment. CP grids are pre-sized by their geometry and never
@@ -196,7 +196,7 @@ function dimacsInitialState(definition: string): ReplayState {
 
 // Read the variable count from a DIMACS `p cnf N M` problem line (a tiny, bounded, total parse). A
 // missing or malformed header falls back to a small default so the canvas still seeds rather than
-// throwing (the nonogramDims/seedCount precedent; threat T-05-20). N is clamped to a sane ceiling so
+// throwing (as nonogramDims and seedCount do). N is clamped to a sane ceiling so
 // a hostile header cannot seed an unbounded vector.
 export function dimacsVarCount(definition: string): number {
   const DEFAULT = 8;
@@ -244,7 +244,7 @@ export function applyEvent(state: ReplayState, ev: SolverEvent): ReplayState {
   switch (ev.t) {
     case "propagate": {
       if (ev.engine === "sat") {
-        // Grow the trail on demand so a high-id variable past the seed still lands (IN-04).
+        // Grow the trail on demand so a high-id variable past the seed still lands.
         growGridTo(grid, ev.cell);
         const cell = grid[ev.cell];
         // A SAT unit propagation assigns the variable its forced polarity (`removed` carries the
@@ -281,7 +281,7 @@ export function applyEvent(state: ReplayState, ev: SolverEvent): ReplayState {
       // the `backtrack` arm instead (the snapshot is still recorded, harmlessly, for uniformity).
       if (!snapshots.has(ev.level)) snapshots.set(ev.level, cloneGrid(state.grid));
       // SAT now emits a decision per branch (a chosen literal), so grow the trail on demand for a
-      // high-id variable past the seed (IN-04); CP grids are pre-sized and stay within bounds.
+      // high-id variable past the seed; CP grids are pre-sized and stay within bounds.
       if (ev.engine === "sat") growGridTo(grid, ev.cell);
       const cell = grid[ev.cell];
       if (cell) {
@@ -312,7 +312,7 @@ export function applyEvent(state: ReplayState, ev: SolverEvent): ReplayState {
     case "backtrack": {
       for (const k of [...snapshots.keys()]) if (k > ev.level) snapshots.delete(k);
       if (ev.engine === "sat") {
-        // SAT backjump un-fill (WR-03). The CP snapshot stack does not apply: a SAT trail bands by
+        // SAT backjump un-fill. The CP snapshot stack does not apply: a SAT trail bands by
         // decision level, and a non-chronological backjump to `ev.level` un-assigns every variable
         // assigned ABOVE it. Wipe each cell whose `level > ev.level` back to open (the restart wipe
         // below, but bounded by level instead of clearing everything), so stale "assigned" cells at
