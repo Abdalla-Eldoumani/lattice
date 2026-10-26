@@ -8,7 +8,7 @@
 // engine's own 1UIP learned clause (its genuine deduction) via formatClause.
 //
 // The conflict is named in text (legible without color); the conflict-red is a secondary cue on the
-// heading, never the only signal (VIZ-08). The panel is an aria-live region so a screen reader hears
+// heading, never the only signal. The panel is an aria-live region so a screen reader hears
 // the explanation when it opens or changes. Styled with locked tokens only (no new @theme token, no
 // drop shadow); the global reduced-motion block already collapses any transition.
 
@@ -37,7 +37,7 @@ export function ConflictExplainer({
     >
       <div className="flex items-baseline justify-between gap-2">
         {/* The heading names the conflict in words first; the conflict-red border + the ⊥ glyph are the
-            secondary, non-color-only cues (VIZ-08). */}
+            secondary, non-color-only cues. */}
         <h3 className="flex items-baseline gap-2 text-sm text-[color:var(--color-state-conflict)]">
           <span aria-hidden="true">⊥</span>
           <span>conflict at {subject}</span>
