@@ -906,7 +906,7 @@ analyzeTests =
   , testProperty "post-learning differential: solveSat still agrees with the oracle" $
       forAll genCNF prop_postLearnDifferential
   , testProperty
-      "post-backjump assert is sound (asserting lit true, no other lit true): the WR-01 lock"
+      "post-backjump assert is sound (asserting lit true, no other lit true)"
       $ forAll genDenseCNF prop_assertedClauseSound
   ]
 
@@ -1135,7 +1135,7 @@ vsidsTests =
           bumpActivity vs 1
           picked <- pickBranch st vs
           pure (picked == Just 1)
-  , testCase "pickBranch orders by activity magnitude, not variable index (WR-06)" $
+  , testCase "pickBranch orders by activity magnitude, not variable index" $
       -- The single-bump test above passes even if pickBranch ignored activity and returned the first
       -- unassigned var (here v1 is also the lowest index). This pins ORDERING: bump v2 thrice and v1
       -- once, so activity(v2) > activity(v1) > activity(v0)=0. pickBranch must return the higher-index
