@@ -25,12 +25,10 @@ common warnings
                       -Wredundant-constraints
     default-language: GHC2021
 
--- The engine library. The module map below is the TARGET shape; modules are added
--- one per task as milestones land, and `exposed-modules` is updated in the same commit
--- that creates the module. Keep `exposed-modules` in sync with the files that exist so
+-- The engine library. Keep `exposed-modules` in sync with the files under src/ so
 -- `cabal build` always passes.
 --
--- Target module map (create as you go):
+-- Module map:
 --   Lattice.Core.Types        variables, values, domains, the trail
 --   Lattice.Core.Domain       domain operations (mutable and pure variants)
 --   Lattice.CP.Propagator     all-different, not-equal, sum, comparison propagators
@@ -41,9 +39,9 @@ common warnings
 --   Lattice.Encode.Graph      graph-coloring model + parser
 --   Lattice.Encode.Queens     N-queens model
 --   Lattice.Event             the event ADT and the Emitter abstraction
---   Lattice.Protocol          aeson instances for the JSON wire protocol  (milestone 3)
+--   Lattice.Protocol          aeson instances for the JSON wire protocol
 --   Lattice.Brute             exhaustive reference solver for differential tests
---   Lattice.SAT.*             CDCL engine: ClauseDB, Watched, Trail, Analyze, VSIDS (milestone 5)
+--   Lattice.SAT.*             CDCL engine: ClauseDB, Watched, Trail, Analyze, VSIDS
 library
     import:           warnings
     hs-source-dirs:   src
@@ -77,8 +75,8 @@ library
                     , text       >=2.1  && <2.2
                     , aeson      >=2.2  && <2.3
 
--- Solve a puzzle in the terminal. This is the milestone-1 deliverable: it reads a puzzle
--- file and prints the solution (or a sound "no solution") with no visualizer involved.
+-- Solve a puzzle in the terminal: reads a puzzle file and prints the solution (or a sound
+-- "no solution") with no visualizer involved.
 executable lattice-cli
     import:           warnings
     hs-source-dirs:   app/cli
@@ -88,7 +86,7 @@ executable lattice-cli
                     , lattice
                     , text
 
--- The streaming visualizer server (milestone 3): Scotty + WebSockets on 127.0.0.1:8080. It streams
+-- The streaming visualizer server: Scotty + WebSockets on 127.0.0.1:8080. It streams
 -- the trace event protocol to the browser front end under web/.
 executable lattice-server
     import:           warnings
@@ -109,7 +107,7 @@ executable lattice-server
 
 -- The test suite carries the correctness load. It runs on Linux in CI. The brute-force
 -- differential check (CP vs exhaustive search on small instances) is the main defense
--- against the silent-wrong-on-hard-instances bug and must land in milestone 1.
+-- against the silent-wrong-on-hard-instances bug.
 test-suite lattice-test
     import:           warnings
     type:             exitcode-stdio-1.0
