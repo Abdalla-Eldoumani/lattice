@@ -357,7 +357,7 @@ gridModel s = case parseGrid (T.pack s) of
 puzzleModel :: Puzzle -> Model
 puzzleModel (Puzzle s) = gridModel s
 
-{- | Graph coloring (ENCODE-02): the Petersen graph 3-colors, and CP agrees with the oracle on
+{- | Graph coloring: the Petersen graph 3-colors, and CP agrees with the oracle on
 k-colorability for small random graphs.
 -}
 graph :: TestTree
@@ -368,7 +368,7 @@ graph =
     , testProperty "CP and the oracle agree on k-colorability" prop_graphColoring
     , testCase "parseGraph rejects an edge naming a non-existent vertex" $
         -- An out-of-range edge (vertex 99 in a 2-vertex graph) would seed an empty domain and
-        -- report a wrong NoSolution; reject it at the parse boundary instead (CR-02).
+        -- report a wrong NoSolution; reject it at the parse boundary instead.
         assertLeft
           ( parseGraph
               "{\"k\":3,\"vertices\":[{\"x\":0,\"y\":0},{\"x\":1,\"y\":1}],\"edges\":[[0,99]]}"
@@ -423,7 +423,7 @@ genSmallGraph = do
   edges <- sublistOf [(i, j) | i <- [0 .. n - 1], j <- [i + 1 .. n - 1]]
   pure Graph {graphK = k, graphVertexCount = n, graphEdges = edges}
 
-{- | N-queens (ENCODE-03): the encoder's solution counts match the known sequence. Counting uses the
+{- | N-queens: the encoder's solution counts match the known sequence. Counting uses the
 oracle on the queens model, validating the encoding independently of the CP engine.
 -}
 queens :: TestTree
@@ -436,7 +436,7 @@ queens =
  where
   queenCount n = length (Brute.solveAll (queensModel n))
 
-{- | Nonogram (ENCODE-04): the mandatory round-trip (clues -> CP solve -> grid -> re-derive clues =
+{- | Nonogram: the round-trip (clues -> CP solve -> grid -> re-derive clues =
 the input), a unit check of the run-length extraction, a tractable uniqueness gate on a tiny
 instance the dumb oracle can enumerate, and the sound-propagation property on random small
 satisfiable nonograms (the silent-killer guard for the new 'LineClue' propagator). The heart
@@ -462,10 +462,10 @@ nonogram =
         forAll genSatNonogram (soundPropHolds . nonogramModel)
     , testCase "parseNonogram rejects a clue list shorter than its dimension" $
         -- A well-typed but malformed payload (rows says 10, rowClues is empty) must be a Left,
-        -- not a Right that crashes the solve thread on a partial index (CR-01).
+        -- not a Right that crashes the solve thread on a partial index.
         assertLeft (parseNonogram "{\"rows\":10,\"cols\":10,\"rowClues\":[],\"colClues\":[]}")
     , testCase "parseNonogram rejects a non-positive run length" $
-        -- A degenerate 0-run clue diverges from the oracle (WR-01); reject it at the boundary.
+        -- A degenerate 0-run clue diverges from the oracle; reject it at the boundary.
         assertLeft
           ( parseNonogram
               "{\"rows\":1,\"cols\":3,\"rowClues\":[[0]],\"colClues\":[[],[],[]]}"
@@ -477,7 +477,7 @@ assertLeft :: (Show a) => Either String a -> IO ()
 assertLeft (Left _) = pure ()
 assertLeft (Right a) = assertFailure ("expected Left for malformed input, got Right " <> show a)
 
-{- | The mandatory ENCODE-04 round-trip: the CP engine solves the heart fixture, and the solved grid
+{- | The nonogram round-trip: the CP engine solves the heart fixture, and the solved grid
 re-derives exactly the input row and column clues. Two independent checks in one — a wrong solve or a
 wrong encoding both fail it.
 -}
@@ -524,7 +524,7 @@ genSatNonogram = do
       , nonoColClues = map lineClue (transpose grid)
       }
 
-{- | Ordering (ORDER-01/02/03): MRV with the degree tie-break and LCV measurably reduces the
+{- | Ordering: MRV with the degree tie-break and LCV measurably reduces the
 decisions the search makes on hard-17 versus naive in-order selection. Recorded counts (deterministic
 on this instance): naive makes 36400 decisions, MRV makes 1473 — about a 25x reduction. The assertion
 prints both counts on failure.
@@ -543,7 +543,7 @@ ordering =
           ("expected MRV < naive, got MRV=" <> show mrvD <> " naive=" <> show naiveD)
           (mrvD < naiveD)
 
-{- | Sum and comparison propagators (CORE-06): on satisfiable-by-construction models that use 'SumEq'
+{- | Sum and comparison propagators: on satisfiable-by-construction models that use 'SumEq'
 and 'LessEq', the engine returns a valid solution (soundness) and one fixpoint never prunes a real
 solution value (sound propagation).
 -}
@@ -583,7 +583,7 @@ genSumCompModel = do
       , modelConstraints = SumEq vars (sum witness) : [LessEq a b | (a, b) <- comps]
       }
 
-{- | The event protocol (EVENT-02): the versioned, tagged JSON round-trips — encoding an event and
+{- | The event protocol: the versioned, tagged JSON round-trips — encoding an event and
 decoding it back is the identity.
 -}
 eventProtocol :: TestTree
@@ -616,7 +616,7 @@ instance Arbitrary Control where
         pure Lattice.Protocol.Restart
       ]
 
-{- | Trace mode (EVENT-01): solving a small instance emits a coherent event stream — propagation
+{- | Trace mode: solving a small instance emits a coherent event stream — propagation
 events as candidates are pruned, and a final 'Solution' event whose assignment matches the result.
 -}
 traceMode :: TestTree
@@ -654,8 +654,8 @@ instance Arbitrary Event where
       ]
 
 {- | The SAT group: the DIMACS boundary (total parse, canonical print, parse-print identity, and the
-malformed-input rejections) and the exhaustive CNF oracle in 'Lattice.Brute'. These are this phase's
-data-spine correctness checks; the engine's own differential lands in a later slice.
+malformed-input rejections), the exhaustive CNF oracle in 'Lattice.Brute', and the engine checked
+against that oracle.
 -}
 sat :: TestTree
 sat =
@@ -762,10 +762,10 @@ parseFixture path = do
     Left e -> assertFailure ("fixture did not parse: " <> e)
     Right cnf -> pure cnf
 
-{- | Watched-literal BCP tests (SAT-01). A small clause set is built by hand, clauses are attached,
+{- | Watched-literal BCP tests. A small clause set is built by hand, clauses are attached,
 a literal is forced, and propagation drives a fixpoint — the unit case forces the other watch, the
 conflict case returns the falsified clause-ref, and the two-watched invariant holds after every step.
-The invariant is the silent-killer guard for mis-propagation (T-05-04).
+The invariant is the silent-killer guard for mis-propagation.
 -}
 watchedTests :: [TestTree]
 watchedTests =
@@ -813,10 +813,10 @@ watchedTests =
  where
   lit = mkLit
 
-{- | The naive-decision CDCL skeleton (SAT-05, SAT half): 'solveSat' agrees with each fixture's known
+{- | The naive-decision CDCL skeleton: 'solveSat' agrees with each fixture's known
 status and returns a model that satisfies the formula, and the brute-vs-SAT differential holds on small
 random CNF — 'solveSat' reports Sat iff the exhaustive oracle does, and any reported model satisfies
-every clause. The oracle shares no inference with the engine, so a backtrack-only divergence (T-05-05)
+every clause. The oracle shares no inference with the engine, so a backtrack-only divergence
 surfaces here.
 -}
 skeletonTests :: [TestTree]
@@ -887,7 +887,7 @@ genCNF = do
     pos <- elements [True, False]
     pure (mkLit v pos)
 
-{- | 1UIP conflict analysis (SAT-02), the learning-correctness gate. The PRIMARY check is the
+{- | 1UIP conflict analysis, the learning-correctness gate. The PRIMARY check is the
 implied-clause property — the silent-killer guard, the SAT analogue of the CP sound-propagation test:
 every clause the solver learns is implied by the formula, i.e. @formula AND not-clause@ is UNSAT by
 the @2^n@ 'Brute' oracle. Plus: 'analyze1UIP' on a constructed conflict produces a clause that is
@@ -910,7 +910,7 @@ analyzeTests =
       $ forAll genDenseCNF prop_assertedClauseSound
   ]
 
-{- | The PRIMARY property (T-05-07): collect every clause the solver learns on a random CNF and assert
+{- | The PRIMARY property: collect every clause the solver learns on a random CNF and assert
 each is implied by the formula — @formula AND (negation of the learned clause)@ is UNSAT by the
 exhaustive oracle. A learned clause that is not implied silently corrupts trust in the result; this is
 the SAT counterpart of the CP sound-propagation guard and gates the plan.
@@ -936,8 +936,8 @@ impliedBy cnf clause =
   litCodeOf (Lit code) = code
 
 {- | Every learned clause is asserting: exactly one of its literals was assigned at the conflict's
-current decision level. A non-asserting learned clause does not flip the search forward and loops it
-(T-05-08); the 1UIP stop condition guarantees this shape. Re-derived here by replaying the solve and
+current decision level. A non-asserting learned clause does not flip the search forward and loops it;
+the 1UIP stop condition guarantees this shape. Re-derived here by replaying the solve and
 checking each learned clause against the levels recorded when it was learned (the collector records the
 conflict level alongside the clause).
 -}
@@ -983,7 +983,7 @@ nonChronoBackjump = runST $ do
  where
   lit = mkLit
 
-{- | The post-learning differential (T-05-09): with conflict analysis and non-chronological backjump
+{- | The post-learning differential: with conflict analysis and non-chronological backjump
 wired into 'solveSat', the engine still agrees with the exhaustive oracle on satisfiability and any
 returned model still satisfies the formula. A learning bug that corrupts the trail on backjump surfaces
 on a backtracking instance here.
@@ -998,12 +998,12 @@ check. Built on the same collecting solve as 'solveSatLearned'.
 solveSatLearnedLevels :: CNF -> (SatResult, [([(Lit, Int)], Int)])
 solveSatLearnedLevels = solveSatLearnedAtLevels
 
-{- | WR-01 lock: the precise, load-bearing post-backjump invariant — written to match the engine's
+{- | The post-backjump assert lock: the precise, load-bearing post-backjump invariant — written to match the engine's
 ACTUAL convention, which is deliberately non-canonical and was confirmed empirically (see below).
 
 The engine's @unwindTo bj@ truncates the trail to @tLevels[bj-1]@, i.e. it drops decision level @bj@
 ITSELF along with everything above it — diverging from MiniSat @cancelUntil(bj)@, which keeps level
-@bj@. The reviewer (WR-01) worried this leaves the learned clause's highest /other/ literal (at level
+@bj@. The worry is that this leaves the learned clause's highest /other/ literal (at level
 @bj@ by 'secondHighest') UNASSIGNED, so the asserting clause is not unit when the asserting literal is
 enqueued, and that a later 1UIP resolution against this clause could then drop that unassigned literal
 ('Analyze.absorb' reads @varLevel == -1 <= 0@ and skips it) and learn a NON-IMPLIED clause.
@@ -1113,7 +1113,7 @@ prop_assertedClauseSound cnf =
       lv <- SatW.litValue st l
       if lv == 0 || lv == -1 then go ls else pure False
 
-{- | VSIDS + phase saving + the Luby generator (SAT-03), the deterministic search-heuristic deliverable.
+{- | VSIDS + phase saving + the Luby generator: the deterministic search heuristics.
 These are pinned to exact values — no randomness: the Luby sequence equals the known literal sequence; a
 bumped variable wins 'pickBranch' over an un-bumped one; the overflow rescale scales every activity down
 while preserving the relative order; and phase saving returns the last-saved polarity. End-to-end search
@@ -1194,11 +1194,11 @@ vsidsTests =
  where
   lit = mkLit
 
-{- | The post-heuristics differential (the second half of SAT-05). With VSIDS branching, phase saving,
+{- | The post-heuristics differential. With VSIDS branching, phase saving,
 and the Luby restart schedule wired into the CDCL loop, the solver still agrees with the exhaustive
 oracle on satisfiability and any returned model still satisfies the formula. VSIDS/Luby change WHICH
 path is explored, never which answers are valid — a restart that dropped a learned clause or corrupted
-the trail (T-05-11) would diverge from the oracle here. The 'denser' generator piles more clauses onto
+the trail would diverge from the oracle here. The 'denser' generator piles more clauses onto
 fewer variables so conflicts and restarts actually fire.
 -}
 heuristicsTests :: [TestTree]
@@ -1239,11 +1239,11 @@ genDenseCNF = do
     pos <- elements [True, False]
     pure (mkLit v pos)
 
-{- | The three-way differential (SAT-05, the phase's load-bearing correctness gate). A small graph is
+{- | The three-way differential (the load-bearing correctness gate for both engines). A small graph is
 dual-encoded to CNF by 'graphCNF', so CP (the 'graphModel' CSP), SAT ('solveSat' on the CNF), and brute
 force (BOTH the @2^n@ CNF oracle 'Brute.satisfiableCNF' AND the CP enumerator 'Brute.solveFirst') solve
 the genuinely same instance. The three engines must AGREE on satisfiability, and on a unique-solution
-instance on the coloring. If the dual encoding were wrong (T-05-15), SAT would solve a different problem
+instance on the coloring. If the dual encoding were wrong, SAT would solve a different problem
 than CP/brute and diverge here — that is exactly what this gate catches. Graphs are tiny (2..4 vertices,
 2..3 colors) so the @2^n@ oracle over the @vertices * colors@ CNF variables stays fast.
 -}
