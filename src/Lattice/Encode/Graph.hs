@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-{- | The graph-coloring encoder (ENCODE-02). It parses the fixed-layout JSON in @puzzles/graph/*.json@
+{- | The graph-coloring encoder. It parses the fixed-layout JSON in @puzzles/graph/*.json@
 and builds a CSP: one variable per vertex with domain @{1..k}@, and a 'NotEqual' for every edge so
 adjacent vertices take different colors. The @x,y@ layout coordinates are for the visualizer and are
 not needed to solve, so they are read past.
