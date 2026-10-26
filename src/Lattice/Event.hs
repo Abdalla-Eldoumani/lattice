@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-{- | The event protocol (EVENT-01/02): the 'Event' ADT the engine emits as it reasons, the 'Emit'
+{- | The event protocol: the 'Event' ADT the engine emits as it reasons, the 'Emit'
 callback that carries events out of the hot loop, and the versioned, tagged JSON wire form the front
 end consumes. The wire form is one object with a version field @v@ and a tag @t@; payloads speak
 puzzle coordinates (cell indices), never internal solver ids. Fast mode passes 'noEmit', a callback
