@@ -69,7 +69,7 @@ checks them instantly:
 Parametric, no file. The CLI and gallery take `N` directly. `queens · 12 (hard)` in the
 gallery is the hard preset: N=12 backtracks 33 times before placing all twelve queens.
 
-## Hard presets (VIZ-07)
+## Hard presets
 
 Each puzzle kind has a `hard` preset in the gallery picker that makes the search visibly
 struggle and recover. The rule for a hard preset: it must be solvable AND its event stream
