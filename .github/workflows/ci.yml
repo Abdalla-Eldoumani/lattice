@@ -91,9 +91,9 @@ jobs:
       - name: Lint
         run: hlint .
 
-  # The front end is a milestone-3 component. This job activates the moment a lockfile
-  # exists under web/ and stays green (skipped steps) before then, so CI is meaningful
-  # from milestone 1 without failing on a directory that has no app in it yet.
+  # The front end lives under web/. This job runs only when web/package-lock.json exists
+  # and otherwise skips its steps and stays green, so CI never fails on a checkout
+  # that has no front end in it.
   web:
     name: web build (node 22)
     runs-on: ubuntu-latest
@@ -107,7 +107,7 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "web/package-lock.json not found; skipping web build (expected before milestone 3)."
+            echo "web/package-lock.json not found; skipping web build."
           fi
 
       - name: Set up Node
