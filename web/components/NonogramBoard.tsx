@@ -1,13 +1,13 @@
 "use client";
 
-// The nonogram board (VIZ-04, ENCODE-04 render). A grid with the row clues down the left and the
+// The nonogram board. A grid with the row clues down the left and the
 // column clues across the top, animating the engine's cell-boolean stream into the recognizable
 // picture. The nonogram encoder uses one variable per grid cell (cell = row-major index r*cols + c)
 // whose VALUE is the bit (1 ink, 0 blank), so the shared cell-state model already carries everything
 // this renderer needs: it owns the var<->coordinate interpretation (cell index -> (r,c)) and reads
 // each cell's state directly, the same client-owns-geometry pattern GraphView and QueensBoard follow.
 //
-// The three cell states are visually distinct WITHOUT relying on hue (VIZ-08, the second signal):
+// The three cell states are visually distinct WITHOUT relying on hue (the second signal):
 //   - filled  (ink block): value === 1, or the only surviving candidate is 1 (line-AC forced ink)
 //   - eliminated (faint x): value === 0, or the only surviving candidate is 0 (forced blank)
 //   - unknown (blank): still both bits possible
@@ -89,7 +89,7 @@ export function NonogramBoard({ definition, grid }: { definition: string; grid: 
   // The longest clue stacks set the width/height of the clue gutters so the numbers never clip.
   const maxRowClue = Math.max(1, ...rowClues.map((c) => c.length));
   const maxColClue = Math.max(1, ...colClues.map((c) => c.length));
-  // Keep the cells square and bounded so clue tracks fit at 375 without clipping (VIZ-08 / Layout).
+  // Keep the cells square and bounded so clue tracks fit at 375 without clipping.
   const cell = Math.min(28, Math.floor(360 / (cols + maxRowClue)));
   const clueText = "var(--color-ink-dim)";
 
@@ -171,7 +171,7 @@ function NonoCell({ cell, size }: { cell: Cell | undefined; size: number }) {
         />
       )}
       {mark === "eliminated" && (
-        // a faint x: the propagation second signal for a cell that can no longer be ink (VIZ-08).
+        // a faint x: the propagation second signal for a cell that can no longer be ink.
         <span
           className="leading-none"
           style={{ color: "var(--color-state-propagate)", fontSize: size * 0.7 }}
