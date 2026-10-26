@@ -221,7 +221,7 @@ export function useSolver(): SolverState {
         // Race mode: one socket, two models. Route the event by its `engine` tag into the matching
         // side and apply it to that side's reducers only, so the two panels never cross-contaminate.
         // A known cp/sat tag routes; an untagged or unknown tag is ignored for the race split (it
-        // cannot belong to a panel) rather than corrupting one — the safe boundary (threat T-05-22).
+        // cannot belong to a panel) rather than corrupting one, the safe boundary.
         const side = ev.engine === "cp" ? r.cp : ev.engine === "sat" ? r.sat : null;
         if (side) {
           side.state = applyEvent(side.state, ev);
