@@ -1,6 +1,6 @@
 {- | The graph-coloring CNF dual encoder. 'graphCNF' turns a graph-coloring instance into a 'CNF' the
 SAT engine and the @2^n@ oracle both consume, so CP (via 'Lattice.Encode.Graph.graphModel'), SAT, and
-brute force solve the genuinely same problem — the foundation of the three-way differential (SAT-05)
+brute force solve the genuinely same problem — the foundation of the three-way differential test
 and the solver race. This module OWNS the @var <-> (vertex, color)@ map, the same discipline
 'graphModel' has over its @vertex -> CSP variable@ map; the SAT engine never sees vertex/color
 coordinates, only the flat boolean variables this encoder hands it.
