@@ -36,7 +36,7 @@
      palette spirit: warm neutrals and the ochre, no neon, no purple/teal/cyan. These are NOT state
      colors (a class-red vertex is not "in conflict"), so they deliberately avoid state-conflict and
      state-solved. Color alone never identifies a class — every colored vertex also carries its
-     numeral id, the mandatory non-color signal (VIZ-08). Each fill holds >= 3:1 vs bg; the numeral
+     numeral id, the non-color signal. Each fill holds >= 3:1 vs bg; the numeral
      reads at >= 4.5:1 on its fill via a per-fill label color (dark label on the light fills, ink on
      the dark ones). Petersen needs 3 classes, the hard graph needs 4. */
   --color-graph-1: #e08d3c; /* class 1: accent ochre (fill 7.39:1 vs bg, bg-label 7.39:1) */
