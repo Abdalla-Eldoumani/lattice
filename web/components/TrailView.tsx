@@ -1,6 +1,6 @@
 "use client";
 
-// The SAT assignment-trail view (SAT-06). A SAT instance has no inherent 2D geometry, so this renders
+// The SAT assignment-trail view. A SAT instance has no inherent 2D geometry, so this renders
 // the assignment VECTOR: one square cell per SAT variable, in variable-id order, grouped into
 // horizontal decision-level bands. It is the SAT peer of GraphView / QueensBoard / NonogramBoard and
 // owns the var<->coordinate map exactly as they do (cell index == variable id, the engine's natural
@@ -8,7 +8,7 @@
 // `value` is the polarity (0/1), `status` distinguishes decided / propagated / conflict / solved, and
 // the optional `level` bands the cell.
 //
-// Color is NEVER the only signal for any SAT state (VIZ-08, the SAT-06 core). Each fact carries a
+// Color is NEVER the only signal for any SAT state. Each fact carries a
 // non-color second signal:
 //   - polarity:  a centered T / F glyph (mono); unassigned shows no glyph (blank). Polarity is read
 //                off the glyph, not the fill hue.
@@ -48,7 +48,7 @@ interface Band {
   vars: number[];
 }
 
-// The graph-N tint for a level band, N = level mod 4 (the Phase-4 ramp reused as a categorical depth
+// The graph-N tint for a level band, N = level mod 4 (the graph-coloring class ramp reused as a categorical depth
 // read, NOT a new semantic — the band LABEL is what identifies the level). The unassigned group has
 // no tint.
 function bandTint(level: number | null): string {
@@ -195,7 +195,7 @@ function TrailCell({ v, cell, size }: { v: number; cell: Cell | undefined; size:
   const solved = status === "solved";
 
   // true polarity takes an ink-tinted fill; false takes surface-2; unassigned is a dimmed surface-2.
-  // The GLYPH (T / F / blank), not the fill, is what reads the polarity (VIZ-08).
+  // The GLYPH (T / F / blank), not the fill, is what reads the polarity.
   const fill = !assigned
     ? "var(--color-surface-2)"
     : value === 1
