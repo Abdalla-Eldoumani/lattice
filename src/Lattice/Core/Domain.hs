@@ -1,4 +1,4 @@
-{- | The six pure, total domain operations (CORE-01) every propagator and the search loop
+{- | The six pure, total domain operations every propagator and the search loop
 call. None use 'error' or a partial pattern match: an absent variable reads as an empty
 domain, and the singleton lookup is total. Totality here is what lets the layers above
 reason about conflict and assignment without guarding against crashes.
