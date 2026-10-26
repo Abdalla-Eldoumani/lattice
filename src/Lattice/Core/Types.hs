@@ -44,10 +44,10 @@ type Domains = IntMap Domain
 type Assignment = IntMap Value
 
 {- | The constraints the encoders build. 'NotEqual' is its own constructor (not @AllDifferent
-[a, b]@) so graph-coloring reuses the binary case directly. Phase 2 adds three more:
+[a, b]@) so graph-coloring reuses the binary case directly. Three more:
 'AllDiffOffset' makes the values @v + offset@ pairwise distinct (the three-line N-queens encoding —
 columns and both diagonals), and 'SumEq' / 'LessEq' are the sum and comparison constraints.
-Phase 4 adds 'LineClue' for nonograms: a line of @{0,1}@ cells (in order) whose maximal runs of 1s
+'LineClue' is for nonograms: a line of @{0,1}@ cells (in order) whose maximal runs of 1s
 must match the run-length clue — contiguity no existing constraint expresses ('SumEq' fixes a
 line's total ink but not its run pattern).
 -}
