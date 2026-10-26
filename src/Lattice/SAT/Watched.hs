@@ -408,7 +408,7 @@ stateValueOf st = varValue (ssTrail st)
 currentLevel :: (PrimMonad m) => SatState (PrimState m) -> m Int
 currentLevel st = readMutVar (ssLevel st)
 
-{- | The two-watched-literal invariant checker (SAT-01). Scans every clause and confirms it watches two
+{- | The two-watched-literal invariant checker. Scans every clause and confirms it watches two
 non-false literals, OR is unit (a watch unassigned, the rest false) OR conflicting (all literals false).
 A clause of length < 2 is exempt (a unit clause is always "forced or satisfied", an empty one is the
 formula's conflict). Returns 'True' when the invariant holds. Called only behind a 'Bool' flag that is
