@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-{- | The streaming visualizer server (SERVER-01/02). Scotty serves the front end on 127.0.0.1:8080,
+{- | The streaming visualizer server. Scotty serves the front end on 127.0.0.1:8080,
 and a single WebSocket carries the bidirectional protocol: the client sends 'Control' messages, the
 server streams 'Lattice.Event.Event's. The connection runs in single-step mode — each emitted event
 blocks on a gate until the client releases it, so a solve animates at human pace. 'Step' releases one
@@ -72,7 +72,7 @@ thread blocked on the gate so two solves interleave their events onto one socket
 solves (CP and SAT) over one socket, so it needs a second solve ref ('sessSolveB') tracked exactly like
 'sessSolve' — a new @Start@/@Restart@ supersedes both, never leaving the second thread blocked on the gate.
 
-Two race-correctness fields (CR-01). 'sessWrite' is a per-connection write lock every
+Two race-correctness fields. 'sessWrite' is a per-connection write lock every
 'WS.sendTextData' goes through: the @websockets@ library does NOT serialize concurrent sends on one
 'WS.Connection', so the race's two solve threads could otherwise interleave their frame bytes and
 corrupt the stream. 'sessGateB' is the SECOND engine's step gate: in a race each engine blocks on its
@@ -142,7 +142,7 @@ dispatch sess = go
     -- The race forks two trace solves on the SAME instance (the CP model and its dual CNF), each
     -- engine-tagged, both tracked for supersession. It runs in PLAY mode, not single-step. Each engine
     -- now blocks on its OWN gate (CP on 'sessGate', SAT on 'sessGateB') and the play loop releases BOTH
-    -- per tick, so a tick advances both engines in step (CR-01: one shared gate released once unblocked
+    -- per tick, so a tick advances both engines in step (one shared gate released once would unblock
     -- only ONE waiter, halving the pacing). Every send goes through the 'sessWrite' lock so the two
     -- threads never interleave a frame. Precise single-stepping stays a single-engine feature; the race
     -- 'Step' releases both gates so it at least advances both rather than an arbitrary one.
@@ -235,7 +235,7 @@ buildModel kind puzzle = case kind of
 {- | Route a @start@ definition to a 'CNF' for the SAT engine. Like 'buildModel', every arm is a total
 'Either', so a malformed definition is a 'Left' the 'Start' branch ignores and never a crash on the
 forked solve thread. The @dimacs@ arm carries raw CNF text and is parsed by the total 'parseDimacs'
-(the Phase 4 partial-function-on-untrusted-input bug class is what this guards) — 'parseDimacs' already
+(so untrusted input can never reach a partial function): 'parseDimacs' already
 bounds @nVars@/@nClauses@ and rejects an out-of-range literal magnitude, so a malformed CNF is a @Left@.
 The @graph@ arm reuses the dual encoder 'graphCNF' over the same 'parseGraph' the CP @graph@ model uses,
 so SAT and CP solve the genuinely same instance.
@@ -289,7 +289,7 @@ it too so the wire is uniform (the protocol declares @engine?@ optional on every
 still v1). The event always encodes to a JSON object, so the @Object@ case always matches; a non-object
 encoding (impossible for an 'Event') is sent unstamped rather than dropped.
 
-The 'withMVar' lock (CR-01) serializes the send: @websockets@ does not synchronize concurrent sends on
+The 'withMVar' lock serializes the send: @websockets@ does not synchronize concurrent sends on
 one 'WS.Connection', so the race's two solve threads could interleave their frame bytes mid-frame and
 corrupt the stream without it. The lock wraps ONLY the send, not the gate wait, so a thread paused on
 its step gate does not hold the socket and block the other engine's sends. Each engine waits on its own
