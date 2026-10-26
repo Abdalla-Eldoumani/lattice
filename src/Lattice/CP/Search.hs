@@ -1,4 +1,4 @@
-{- | Backtracking search, in two modes (EVENT-01). 'searchCore' is the loop generic over the monad:
+{- | Backtracking search, in two modes. 'searchCore' is the loop generic over the monad:
 it propagates (through 'propagateM', so propagation events flow too), makes a decision on the
 most-constrained variable, and emits a 'Decision' as it branches, a 'Backtrack' when a branch fails,
 and a 'Solution' when every variable is a singleton. 'search' and 'searchStats' are the pure
