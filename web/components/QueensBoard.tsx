@@ -1,11 +1,11 @@
 "use client";
 
-// The N-queens board (VIZ-04). An n x n chessboard that animates the engine's placements. The queens
+// The N-queens board. An n x n chessboard that animates the engine's placements. The queens
 // encoder uses one variable per ROW (cell = row index 0..n-1) whose VALUE is the queen's COLUMN
 // (0..n-1), so a `decision cell=2 value=5` means "queen on row 2, column 5". This renderer owns that
 // var<->coordinate interpretation: it reads the shared cell-state model row by row and draws a queen
 // glyph on the placed square. The queen glyph (a shape, not a color) is the second non-color signal
-// for a placement (VIZ-08); an attacked square flashes the conflict color and the thinking panel
+// for a placement; an attacked square flashes the conflict color and the thinking panel
 // announces it. Depth comes from the alternating surface fills and 1px borders, never a shadow.
 
 import { type Cell } from "../lib/replay";
@@ -51,7 +51,7 @@ export function QueensBoard({ grid, n }: { grid: Cell[]; n: number }) {
             ? "var(--color-state-conflict)"
             : "var(--color-ink)";
         // a placed-and-solved square settles to a solved border (a non-color shape cue) and carries a
-        // small check mark, so the solved state does not rest on the green glyph hue alone (VIZ-08).
+        // small check mark, so the solved state does not rest on the green glyph hue alone.
         const border = solved ? "var(--color-state-solved)" : "var(--color-border)";
         const borderWidth = solved ? "1.5px" : "0.5px";
         return (
@@ -67,7 +67,7 @@ export function QueensBoard({ grid, n }: { grid: Cell[]; n: number }) {
                 className="font-[family-name:var(--font-display)] leading-none"
                 style={{ color: glyphColor, fontSize: `min(${Math.floor(360 / n)}px, 2.5rem)` }}
               >
-                {/* black chess queen U+265B: shape carries the placement signal, not color (VIZ-08) */}
+                {/* black chess queen U+265B: shape carries the placement signal, not color */}
                 {"♛"}
               </span>
             )}
