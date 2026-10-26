@@ -1,4 +1,4 @@
-{- | The propagation worklist and fixpoint loop (CORE-03), in two modes (EVENT-01). 'propagateM' is
+{- | The propagation worklist and fixpoint loop, in two modes. 'propagateM' is
 the loop generic over the monad: it drains a worklist of constraint indices, re-enqueueing exactly
 the watchers of shrunk variables, and emits a 'Propagate' event for each value removed plus a
 'Conflict' event at the emptied cell. 'propagate' is the pure, fast-mode instantiation — @Identity@
