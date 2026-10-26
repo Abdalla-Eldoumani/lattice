@@ -1,4 +1,4 @@
-// Headless verification of the visualizer (VIZ-01/02/03/04) without a browser: connect to a running
+// Headless verification of the visualizer without a browser: connect to a running
 // lattice-server, single-step through the whole event stream, replay it through the SAME reducer the
 // UI uses (`lib/replay.ts`), and assert the reconstructed state equals the puzzle's known solution.
 // Sudoku cases pin an exact grid string (hard-17 also exercises decisions, conflicts, backtracks, and
@@ -130,7 +130,7 @@ function decodeSatColoring(assignment: [number, number][]): Map<number, number> 
 
 // The bundled nonogram fixtures (the same instances the client renders). The heart is the easy
 // round-trip picture; the hard one is a 7x7 that needs search past line arc-consistency, so its
-// stream must contain at least one backtrack (the programmatic VIZ-07 gate). Definitions carry the
+// stream must contain at least one backtrack (the programmatic struggle gate). Definitions carry the
 // rows/cols + clues the server parses; the flat solution string is what the reducer reconstructs.
 const HEART_DEF = JSON.stringify({
   name: "heart",
@@ -180,7 +180,7 @@ function checkNonogram(expected: string) {
 
 // The hard-nonogram gate: the picture must reconstruct AND the stream must contain >= 1 backtrack
 // (a zero-backtrack stream means the instance solved by pure propagation and is NOT exercising
-// search, so it fails the case). This is the programmatic proof the hard fixture struggles (VIZ-07).
+// search, so it fails the case). This is the programmatic proof the hard fixture struggles.
 function checkHardNonogram(expected: string) {
   return (state: ReplayState): { ok: boolean; detail: string } => {
     const got = gridToString(state.grid);
@@ -391,12 +391,12 @@ function runCase(c: Case): Promise<{ name: string; ok: boolean; detail: string }
   });
 }
 
-// The race case (SAT-06 / CR-01): one `start` with engine "race" forks BOTH engines over one socket on
+// The race case: one `start` with engine "race" forks BOTH engines over one socket on
 // the SAME dual-encoded graph, every event engine-tagged. This is the headless peer of the two-panel UI
 // flow, the one race path that was previously only checked by a one-off probe. It asserts the contract
 // the panel split depends on:
 //   - EVERY streamed event carries an `engine` tag (an untagged event would be dropped by the split and
-//     cannot belong to a panel — threat T-05-22; one untagged event fails the case);
+//     cannot belong to a panel; one untagged event fails the case);
 //   - the stream routes into two independent reducer states by tag, exactly as `useSolver` does;
 //   - BOTH engines resolve (each reaches its own `solution`/`unsat`) on the genuinely same instance;
 //   - the CP side reconstructs a valid k-coloring (the existing checkGraphColoring) AND the SAT side's
