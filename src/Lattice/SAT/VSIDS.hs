@@ -186,7 +186,7 @@ branchPhase st v = (== 1) <$> varPhase (ssTrail st) v
   * @t_i = t_(i - 2^(k-1) + 1)@     when @2^(k-1) <= i < 2^k - 1@ (recurse into the prefix).
 
 A restart fires after @unit * luby i@ conflicts; the multiplier @unit@ is a constant the solver picks.
-Pure and total for @i >= 1@, so it is unit-tested against the literal sequence (the SAT-03 deliverable).
+Pure and total for @i >= 1@, so it is unit-tested against the literal sequence.
 -}
 luby :: Int -> Int
 luby i = go 1 1
