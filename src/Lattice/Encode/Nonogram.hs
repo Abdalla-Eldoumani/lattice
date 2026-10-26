@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-{- | The nonogram encoder (ENCODE-04). It parses the fixed-layout JSON in
+{- | The nonogram encoder. It parses the fixed-layout JSON in
 @puzzles/nonogram/*.json@ and builds a CSP with one boolean variable per cell (0 blank, 1 ink)
 at the row-major index @r * cols + c@, plus one 'LineClue' constraint per row and per column
 carrying that line's variables (in order) and its run-length clue. The cell-boolean encoding
