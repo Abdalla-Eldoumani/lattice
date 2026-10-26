@@ -21,7 +21,7 @@ export interface PuzzleDef {
 }
 
 // A copy of puzzles/graph/petersen.json, bundled so the client owns its definition. The server's
-// graph encoder reads `k`, `vertices`, and `edges`; the `x,y` layout is for the view (VIZ-06).
+// graph encoder reads `k`, `vertices`, and `edges`; the `x,y` layout is for the view.
 const PETERSEN = JSON.stringify({
   name: "petersen",
   kind: "graph-coloring",
@@ -58,7 +58,7 @@ const HEART = JSON.stringify({
 });
 
 // A copy of puzzles/nonogram/hard.json: a 7x7 nonogram that needs search past line arc-consistency
-// (10 decisions, 4 backtracks under MRV), so the search visibly struggles and recovers (VIZ-07).
+// (10 decisions, 4 backtracks under MRV), so the search visibly struggles and recovers.
 const HARD_NONOGRAM = JSON.stringify({
   name: "hard",
   kind: "nonogram",
@@ -69,7 +69,7 @@ const HARD_NONOGRAM = JSON.stringify({
 });
 
 // A copy of puzzles/graph/hard.json: a dense 10-vertex 4-chromatic graph (uncolorable at k=3) that
-// backtracks 3 times before recovering at k=4 (VIZ-07). The fixed circular layout drives the view.
+// backtracks 3 times before recovering at k=4. The fixed circular layout drives the view.
 const HARD_GRAPH = JSON.stringify({
   name: "hard",
   kind: "graph-coloring",
@@ -142,7 +142,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     label: "graph · petersen",
     definition: PETERSEN,
     // Dual-encodable: the server builds both the CP graph model and graphCNF from this, so it can
-    // race cp vs sat on the genuinely same instance (the race two-panel layout lands in plan 08).
+    // race cp vs sat on the genuinely same instance.
     dualEncodable: true,
   },
   "graph-hard": {
